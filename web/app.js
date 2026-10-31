@@ -56,7 +56,33 @@ async function api(path, body) {
   return result;
 }
 
-const status = value => `<span class="status ${escapeHtml(value)}"><i></i>${escapeHtml(value.replaceAll('_', ' '))}</span>`;
+const stateIcons = {
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  spinner:'<circle cx="12" cy="12" r="9" opacity=".22"/><path d="M12 3a9 9 0 0 1 9 9"/>',
+  check:'<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',
+  error:'<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/>',
+  cancel:'<circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/>',
+  stop:'<circle cx="12" cy="12" r="9"/><rect x="9" y="9" width="6" height="6" rx="1"/>',
+  pause:'<circle cx="12" cy="12" r="9"/><path d="M9 8v8m6-8v8"/>',
+  warning:'<path d="m12 3 10 18H2L12 3Zm0 6v5m0 3h.01"/>',
+  question:'<circle cx="12" cy="12" r="9"/><path d="M9 9a3 3 0 0 1 6 0c0 2-3 2-3 5m0 3h.01"/>',
+  folder:'<path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>',
+  cleaned:'<path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/><path d="m8 13 3 3 5-6"/>'
+};
+function stateIcon(name) {
+  return `<svg class="state-icon ${name === 'spinner' ? 'is-spinning' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${stateIcons[name] || stateIcons.question}</svg>`;
+}
+const jobStateAppearance = {
+  queued:['clock','amber'],running:['spinner','blue'],succeeded:['check','green'],failed:['error','red'],
+  canceled:['cancel','slate'],cancel_requested:['stop','amber'],interrupted:['warning','amber'],
+  unknown:['question','amber'],awaiting_approval:['pause','purple'],needs_review:['warning','amber'],
+  online:['check','green'],offline:['cancel','slate']
+};
+function status(value) {
+  const [icon,tone] = jobStateAppearance[value] || ['question','slate'];
+  return `<span class="status ${escapeHtml(value)} tone-${tone}">${stateIcon(icon)}${escapeHtml(value.replaceAll('_', ' '))}</span>`;
+}
+
 const shorten = value => escapeHtml(value.length > 90 ? value.slice(0, 90) + '…' : value);
 function groups() { return state.jobs.map(job => ({id:job.conversation_id, jobs:[job]})); }
 function actions(job) {
@@ -105,10 +131,17 @@ function approvalCard(request) {
   return `<section class="approval" aria-label="${label}"><strong>${label}</strong><p>Review the complete request before deciding. This decision applies once.</p>${request.kind === 'tool' ? '<p>Claude Code does not provide the shell’s current directory in this request. It may differ from the worktree shown above.</p>' : ''}<pre>${escapeHtml(details)}</pre>${request.decision ? `<p class="approval-result">${request.decision === 'accept' ? 'Approved' : request.decision === 'answer' ? 'Answered' : 'Denied'}; waiting for the worker to acknowledge delivery.</p>` : `${request.can_accept ? '' : '<p class="error">The request lacks complete or supported details. It can only be denied.</p>'}<div class="actions"><button class="secondary" data-approval-id="${escapeHtml(request.id)}" data-approval-decision="decline">Deny</button><button class="primary" data-approval-id="${escapeHtml(request.id)}" data-approval-decision="accept" ${request.can_accept ? '' : 'disabled'}>Allow once</button></div>`}</section>`;
 }
 function worktreeStatus(job) {
-  const labels = {succeeded:'Worktree removed',queued:'Cleanup queued',running:'Removing worktree',failed:'Cleanup failed',unknown:'Cleanup uncertain'};
-  const label = labels[job.cleanup_state] || (job.worktree ? 'Worktree retained' : '');
-  return label ? `<span class="worktree-state ${escapeHtml(job.cleanup_state || 'retained')}">${escapeHtml(label)}</span>` : '';
+  const appearances = {
+    succeeded:['Worktree removed','cleaned','green'],queued:['Cleanup queued','clock','amber'],
+    running:['Removing worktree','spinner','blue'],failed:['Cleanup failed','warning','red'],
+    unknown:['Cleanup uncertain','question','amber']
+  };
+  const appearance = appearances[job.cleanup_state] || (job.worktree ? ['Worktree retained','folder','indigo'] : null);
+  if(!appearance)return '';
+  const [label,icon,tone] = appearance;
+  return `<span class="worktree-state ${escapeHtml(job.cleanup_state || 'retained')} tone-${tone}">${stateIcon(icon)}${escapeHtml(label)}</span>`;
 }
+
 function workRow(id, jobs) {
   const first = jobs[0], last = jobs[jobs.length - 1];
   return `<button class="work-row ${selected === id ? 'active' : ''}" data-job="${escapeHtml(id)}"><span class="job-icon">${last.runner === 'codex' ? 'C' : '✳'}</span><span class="job-main"><strong>${shorten(view === 'conversations' ? last.conversation_prompt : first.prompt)}</strong><small>${escapeHtml(last.project)} / ${escapeHtml(last.repository)} · ${escapeHtml(last.runner)}${last.pinned ? ' · Kept open' : ''}${view === 'conversations' && last.turn_count > 1 ? ` · ${last.turn_count} turns` : ''}</small></span><span class="job-states">${status(last.approval_pending ? 'awaiting_approval' : last.state === 'succeeded' && last.permission_denied ? 'needs_review' : last.state)}${worktreeStatus(last)}</span><span class="arrow">›</span></button>${selected === id ? details(turnPage?.jobs || [], last) : ''}`;

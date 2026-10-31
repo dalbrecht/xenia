@@ -45,7 +45,8 @@ host platform; use the supported download reported by Playwright.
 Each suite runs approval and question interactions at 390 and 320 pixels,
 mobile/desktop sign-out and stale-response checks, one-use device pairing,
 camera decoding and cleanup, history navigation at 320 and 1440 pixels, and independent job/worktree states
-at both widths.
+at both widths, including queued/running icon and color distinctions, text
+contrast and reduced-motion behavior.
 Network fault-injection checks disable service workers so request interception
 is deterministic in both engines. A separate case keeps service workers enabled
 and verifies installation assets and offline shell loading on a trustworthy

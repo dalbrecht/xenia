@@ -11,7 +11,7 @@ const fs=require('node:fs'),net=require('node:net'),os=require('node:os'),path=r
  try{
   let ready=false;for(let i=0;i<100;i++){try{await api('workspace',{});ready=true;break}catch{}await new Promise(r=>setTimeout(r,50))}if(!ready)throw Error('Controller did not start');
   const credential=(await api('workers/enroll',{id:'test'})).token;
-  await api('heartbeat',{id:'test',name:'Test',capacity:1,runners:['codex'],instance_id:'instance'},credential);
+  await api('heartbeat',{id:'test',name:'Test',capacity:2,runners:['codex'],instance_id:'instance'},credential);
   const project=(await api('projects',{name:'example',repository:'repo'})).id;
   async function finish(id,outcome,worktree,branch='xenia/'+id){
    const job=await api('claim',{id:'test',instance_id:'instance',claim_id:randomUUID(),eligible:[project]},credential);if(job.id!==id)throw Error('Wrong claimed fixture');
@@ -24,9 +24,21 @@ const fs=require('node:fs'),net=require('node:net'),os=require('node:os'),path=r
   await finish(follow,'succeeded','/tmp/synthetic-success-worktree','xenia/'+success);
   const canceled=(await api('jobs',{project_id:project,runner:'codex',prompt:'Canceled work'})).id;
   await finish(canceled,'canceled','/tmp/synthetic-canceled-worktree');
+  const running=(await api('jobs',{project_id:project,runner:'codex',prompt:'Running work'})).id;
+  const active=await api('claim',{id:'test',instance_id:'instance',claim_id:randomUUID(),eligible:[project]},credential);if(active.id!==running)throw Error('Wrong running fixture');
+  await api('report',{id:running,node_id:'test',state:'running',worktree:'/tmp/synthetic-running-worktree',branch:'xenia/'+running},credential);
+  const queued=(await api('jobs',{project_id:project,runner:'codex',prompt:'Queued work'})).id;
   browser=await browserType.launch({headless:true});const page=await browser.newPage({serviceWorkers:'block',viewport:{width:Number(process.env.XENIA_TEST_WIDTH||390),height:844}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',dialog=>dialog.accept());
   await page.goto(base);await page.getByLabel('Controller token').fill(token);await page.getByRole('button',{name:'Connect',exact:true}).click();
   async function badges(id,outcome,worktree){const row=page.locator(`[data-job="${id}"]`);await row.locator('.status').filter({hasText:new RegExp('^'+outcome+'$','i')}).waitFor();await row.locator('.worktree-state').filter({hasText:worktree}).waitFor();}
+  await page.locator(`[data-job="${queued}"] .status`).filter({hasText:/^queued$/i}).waitFor();
+  const appearance = id => page.locator(`[data-job="${id}"] .status`).evaluate(el=>({color:getComputedStyle(el).color,background:getComputedStyle(el).backgroundColor,icon:el.querySelector('svg')?.innerHTML,hidden:el.querySelector('svg')?.getAttribute('aria-hidden')}));
+  const queuedStyle=await appearance(queued),runningStyle=await appearance(running);
+  if(!queuedStyle.icon||!runningStyle.icon||queuedStyle.icon===runningStyle.icon||queuedStyle.color===runningStyle.color||queuedStyle.background===runningStyle.background)throw Error('Queued and running need distinct colors and icons');
+  if(queuedStyle.hidden!=='true'||runningStyle.hidden!=='true')throw Error('Decorative icons duplicate status announcements');
+  await page.emulateMedia({reducedMotion:'reduce'});
+  if(await page.locator(`[data-job="${running}"] .is-spinning`).evaluate(el=>getComputedStyle(el).animationName)!=='none')throw Error('Spinner ignores reduced-motion preference');
+  await page.emulateMedia({reducedMotion:'no-preference'});
   await badges(success,'succeeded','Worktree retained');await badges(canceled,'canceled','Worktree retained');
   await page.locator(`[data-job="${success}"]`).click();await page.getByRole('button',{name:'Remove worktree',exact:true}).click();await badges(success,'succeeded','Cleanup queued');
   let cleanup=await api('cleanup/claim',{id:'test',instance_id:'instance',claim_id:randomUUID()},credential);await badges(success,'succeeded','Removing worktree');
@@ -39,6 +51,9 @@ const fs=require('node:fs'),net=require('node:net'),os=require('node:os'),path=r
   cleanup=await api('cleanup/claim',{id:'test',instance_id:'instance',claim_id:randomUUID()},credential);await api('cleanup/report',{id:cleanup.id,node_id:'test',state:'succeeded'},credential);await badges(canceled,'canceled','Worktree removed');
   await page.getByRole('button',{name:'Work queue',exact:false}).click();
   await badges(success,'succeeded','Worktree removed');await badges(follow,'succeeded','Worktree removed');await badges(canceled,'canceled','Worktree removed');
+  const colors=await page.locator('.status,.worktree-state').evaluateAll(elements=>elements.map(el=>({foreground:getComputedStyle(el).color,background:getComputedStyle(el).backgroundColor,icon:!!el.querySelector('svg')})));
+  const luminance=color=>color.match(/[\d.]+/g).slice(0,3).map(Number).map(n=>{const c=n/255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4}).reduce((sum,n,i)=>sum+n*[.2126,.7152,.0722][i],0);
+  for(const color of colors){const a=luminance(color.foreground),b=luminance(color.background);if(!color.icon||(Math.max(a,b)+.05)/(Math.min(a,b)+.05)<4.5)throw Error('Status badge lacks its icon or sufficient text contrast');}
   if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('Independent state badges overflow');
   if(process.env.XENIA_WORKTREE_SCREENSHOT)await page.screenshot({path:process.env.XENIA_WORKTREE_SCREENSHOT});
   if(errors.length)throw Error(errors.join('; '));console.log('Independent result/worktree states, cleanup transitions/failure/retry, shared turn worktrees, conversation and queue views: PASS');
