@@ -7,7 +7,7 @@ if ($env:USERPROFILE) { $flags += "--remap-path-prefix=$env:USERPROFILE=/xenia-b
 if ($env:CARGO_HOME) { $flags += "--remap-path-prefix=$env:CARGO_HOME=/xenia-build/cargo" }
 $flags += "--remap-path-prefix=$((Get-Location).Path)=/xenia-build/source"
 $env:CARGO_ENCODED_RUSTFLAGS = $flags -join [char]31
-cargo build --release
+cargo build --release --locked
 if ($LASTEXITCODE -ne 0) { throw 'Rust build failed' }
 dotnet publish apps/windows-worker/XeniaWorker.csproj -c Release -r win-x64 --self-contained true -p:DebugType=None -p:DebugSymbols=false "-p:PathMap=$((Get-Location).Path)=/_/src" -o dist/windows-worker
 if ($LASTEXITCODE -ne 0) { throw '.NET publish failed' }

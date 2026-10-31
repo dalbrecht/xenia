@@ -28,9 +28,10 @@ supported release behavior. No public release tag has been created.
   macOS. Unsupported requests remain explicit or deny-only. Keep their limits
   in [the protocol notes](approval-protocol.md) visible until compatibility is
   established.
-- Resource use: [the existing measurements](performance.md) are individual idle
-  observations. Desktop, active concurrency, longer histories, disk growth,
-  and Windows measurements remain outstanding; they do not establish budgets.
+- Resource use: [the existing measurements](performance.md) include idle
+  controller, worker and desktop RSS, plus a short concurrent real-runner sample.
+  Representative coding sessions, longer histories, disk growth and Windows
+  measurements remain outstanding; current samples do not establish budgets.
 - Phone pairing: single-use two-minute QR links, separate 30-day device
   credentials, expiry, revocation, restart persistence and root-token rotation
   pass isolated API tests. Desktop and 320 px browser checks cover QR rendering,
@@ -47,7 +48,12 @@ supported release behavior. No public release tag has been created.
 - Installation and recovery: [the usage guide](installation.md) and
   [desktop guide](desktop-workers.md) describe current behavior and limitations.
   Controller upgrades retain a private backup; macOS packaging stages a signed
-  replacement. The Windows installer still needs native upgrade verification.
+  replacement. The Windows installer now stages and hashes package files,
+  refuses a running app, and restores the previous app and shortcut on failure.
+  Failure-injection tests on portable PowerShell cover copy, verification,
+  publication and rollback errors, plus incomplete packages and lock contention.
+  A cross-build validates the WPF shared-lock code; actual Windows upgrade and
+  startup verification remain outstanding, including native shortcut checks in CI.
 
 ## Evidence to record before changing this decision
 

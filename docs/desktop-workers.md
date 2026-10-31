@@ -44,11 +44,30 @@ For local development, `XENIA_SIGNING_IDENTITY` can select an existing code-sign
    .\scripts\install-windows-app.ps1
    ```
 
-   The build creates `dist\windows-worker`; the installer copies it to the current user's Local AppData Programs folder and creates a Start-menu shortcut. It does not require administrator rights. It replaces files in that destination; stop the existing app before updating. The current script targets `win-x64` and is not tested on Windows ARM. The package is unsigned.
+   The build creates `dist\windows-worker`; the installer copies it to the current user's Local AppData Programs folder and creates a Start-menu shortcut. It does not require administrator rights. The installer stages and SHA-256 verifies the package before replacing that destination. Stop active work and quit the app before updating; the installer refuses a running app or engine. New app versions and the installer share an exclusive lock, which also prevents opening two desktop instances against the same worker database. A failure attempts to restore the prior app and shortcut; if recovery itself fails, the error identifies the retained backup path. Successful upgrades retain the previous app and shortcut for manual rollback. The current script targets `win-x64` and is not tested on Windows ARM. The package is unsigned.
    To exercise the native Windows command launcher with a disposable fake runner, install Python 3 and run `cargo build` followed by `python tests\windows_runner.py`. This checks prompt delivery and follow-ups without consuming agent credits; it does not replace a test with the installed Codex or Claude CLI.
 3. Open **Xenia Worker** from Start. Enter the enrolled node ID, display name, projects root such as `C:\Users\<user>\projects`, capacity, and one-time worker credential. The credential is saved in Windows Credential Manager. Settings, worker database, and `worker.log` are in `%LOCALAPPDATA%\XeniaWorker`.
 4. For a controller on another machine, enter its SSH destination and a free local port such as `18080`. The app forwards that port to the configured controller port on the SSH host, `8080` by default. Verify the host key and key-based SSH login separately before starting; the app will not display interactive SSH prompts.
 5. Select **Start worker**, then check Nodes in the web app. To turn it off, select **Stop worker** and wait for it to finish active jobs. Closing the window while it is running requests the same graceful stop.
+
+To verify installation behavior without running a real agent, run
+`powershell -NoProfile -File tests\windows_install.ps1` from the source tree.
+The test uses temporary directories and simulated failure points; on Windows it
+also creates and inspects a real temporary Start-menu-format shortcut. Portable
+PowerShell tests on macOS validate filesystem rollback logic, not Windows file
+locking, WPF startup, Credential Manager, or the target machine's installation.
+
+Upgrades leave previous application directories named `.xenia-previous-<id>`
+beside the installed app, and previous shortcut files with the same prefix beside
+the Start-menu shortcut. These contain program files, not worker settings. Keep
+them until the new app has connected and completed a task. For a manual rollback,
+quit the app, move the current application directory aside, and move the chosen
+previous directory back to `%LOCALAPPDATA%\Programs\XeniaWorker`. The normal
+shortcut still points to that location. Restore the matching previous `.lnk` if
+the shortcut is missing or damaged. Do not change `%LOCALAPPDATA%\XeniaWorker`,
+which holds settings and the worker database. Retained application backups consume
+disk space; remove old versions manually after verifying the replacement. Never
+delete `desktop.lock` to bypass a running app: close the app or installer instead.
 
 The Windows worker uses a Windows job object for process-tree cancellation. A small helper waits for job assignment before starting the runner, so the runner's normal child processes inherit the job. Prompts are sent over standard input rather than passed through the command line, including when an installed runner uses a `.cmd` launcher. Its behavior with installed agent versions, Windows job policies, and shell-script launchers must be verified on the target machine before production use.
 

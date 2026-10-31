@@ -79,6 +79,9 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Windows installer rollback and shortcut checks
+        if: runner.os == 'Windows'
+        run: ./tests/windows_install.ps1
       - name: Build Windows worker
         if: runner.os == 'Windows'
         run: ./scripts/build-windows-app.ps1
