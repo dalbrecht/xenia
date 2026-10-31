@@ -1645,6 +1645,19 @@ fn claim_with_retry(
         }
     }
 }
+fn ensure_worktree_directory(path: &Path) -> Result<PathBuf, String> {
+    match fs::create_dir(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(error.to_string()),
+    }
+    let resolved = fs::canonicalize(path).map_err(|e| e.to_string())?;
+    if !resolved.is_dir() {
+        return Err("Worktree parent is not a directory".into());
+    }
+    Ok(resolved)
+}
+
 fn work(
     job: Value,
     root: PathBuf,
@@ -1715,10 +1728,7 @@ fn work(
             let mut parent = project_dir;
             for component in [".worktrees", repo] {
                 let child = parent.join(component);
-                if !child.exists() {
-                    fs::create_dir(&child).map_err(|e| e.to_string())?;
-                }
-                parent = fs::canonicalize(child).map_err(|e| e.to_string())?;
+                parent = ensure_worktree_directory(&child)?;
                 if !parent.starts_with(&root) {
                     return Err("Worktree path escapes projects root".into());
                 }
@@ -2265,6 +2275,31 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn concurrent_worktree_parent_creation_is_idempotent() {
+        let root = env::temp_dir().join(format!("xenia-parent-{}", id()));
+        fs::create_dir(&root).unwrap();
+        let path = root.join("worktrees");
+        let barrier = std::sync::Barrier::new(16);
+        thread::scope(|scope| {
+            let tasks: Vec<_> = (0..16)
+                .map(|_| {
+                    scope.spawn(|| {
+                        barrier.wait();
+                        ensure_worktree_directory(&path).unwrap()
+                    })
+                })
+                .collect();
+            for task in tasks {
+                assert_eq!(task.join().unwrap(), fs::canonicalize(&path).unwrap());
+            }
+        });
+        let file = root.join("file");
+        fs::write(&file, "occupied").unwrap();
+        assert!(ensure_worktree_directory(&file).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn runner_session_cannot_be_parsed_as_an_option() {
         assert!(valid_runner_session("session-123"));
