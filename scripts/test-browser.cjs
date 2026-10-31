@@ -22,6 +22,8 @@ const cases=[
  ['offline_pwa.cjs',{}],
  ['history_ui.cjs',{XENIA_TEST_WIDTH:'320'}],
  ['history_ui.cjs',{XENIA_TEST_WIDTH:'1440'}],
+ ['worktree_status_ui.cjs',{XENIA_TEST_WIDTH:'320'}],
+ ['worktree_status_ui.cjs',{XENIA_TEST_WIDTH:'1440'}],
 ];
 (async()=>{
  for(const [file,options] of cases){

@@ -6,12 +6,12 @@ supported release behavior. No public release tag has been created.
 
 | Acceptance criterion | Current evidence | Remaining verification |
 | --- | --- | --- |
-| Phone submission and progress | Chromium and WebKit interaction checks at phone and desktop widths; trusted HTTPS and offline-shell checks pass in both engines; operator confirmed QR login, successful Codex submission, a follow-up in the same conversation, retained login/history after closing and reopening, and running-task cancellation from the installed iPhone app | Verify network-loss/reconnect and explicit worktree cleanup on the installed phone |
+| Phone submission and progress | Chromium and WebKit interaction checks at phone and desktop widths; trusted HTTPS and offline-shell checks pass in both engines; operator confirmed QR login, successful Codex submission, a follow-up in the same conversation, retained login/history after closing and reopening, and running-task cancellation from the installed iPhone app | Verify network-loss/reconnect on the installed phone |
 | Isolated concurrent worktrees | Synthetic integration tests exercise parallel work and preserve the main checkout; installed macOS runner checks preserve checkout state | Repeat with native Windows runners and the intended multi-node deployment |
 | Capacity and explicit node assignment | Controller tests and local integration exercise capacity, offline assignment, and checkout eligibility | Exercise two physical nodes, including lowering capacity while jobs run |
 | Durable history and recovery | Controller-restart, lost-response, outbox replay, and instance-fencing tests; uncertain work requires explicit inspection; operator confirmed phone login/history survive closing and reopening | Native Windows crash and restart checks; document any platform-specific process survival |
 | Runner and checkout eligibility | Native macOS worker reports both runners and validates registered checkouts | Native Windows discovery, including installed CLI launchers and authentication |
-| Cancellation and explicit cleanup | Synthetic process-supervision tests, dirty-worktree refusal, retained branches; real macOS Claude waiting-run cancellation; operator confirmed running Codex work reaches Canceled from the installed iPhone app | Native Windows process-tree cancellation and cleanup; explicit cleanup from the phone |
+| Cancellation and explicit cleanup | Synthetic process-supervision tests, dirty-worktree refusal, retained branches; real macOS Claude waiting-run cancellation; operator confirmed running Codex work reaches Canceled and explicit cleanup reaches Succeeded from the installed iPhone app | Native Windows process-tree cancellation and cleanup |
 | Both runners complete work | Real macOS Codex and Claude initial conversations, follow-ups, and disposable edit checks; experimental approval transports tested separately | Native Windows real-provider tasks and supported-version compatibility |
 
 ## Operational gates
@@ -26,10 +26,12 @@ supported release behavior. No public release tag has been created.
   with the registered checkout eligible. Windows
   WPF cross-compilation has passed; native build, installation, credentials,
   tunnel recovery, and runtime checks are outstanding.
-- Browser regressions: a pinned development-only Playwright setup runs nine
-  cases per engine for Chromium and WebKit. Both complete suites passed locally,
+- Browser regressions: a pinned development-only Playwright setup now defines eleven
+  cases per engine for Chromium and WebKit. The original nine-case suites passed locally,
   including 320 px approvals, history paging, camera decoding, sign-out and a
-  separate service-worker offline-shell check. GitHub Actions is configured to run
+  separate service-worker offline-shell check. The added independent job/worktree
+  state checks cover cleanup success, failure, retry and shared turn worktrees in
+  Chromium and WebKit at 320 and 1440 px. GitHub Actions is configured to run
   the same matrix; a hosted CI run has not yet been observed. The installed trusted
   HTTPS endpoint also passed the WebKit PWA check with certificate validation.
 - Private connections: the worker uses loopback HTTP through SSH for a remote
