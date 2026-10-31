@@ -31,6 +31,11 @@ supported release behavior. No public release tag has been created.
 - Resource use: [the existing measurements](performance.md) are individual idle
   observations. Desktop, active concurrency, longer histories, disk growth,
   and Windows measurements remain outstanding; they do not establish budgets.
+- Phone pairing: single-use two-minute QR links, separate 30-day device
+  credentials, expiry, revocation, restart persistence and root-token rotation
+  pass isolated API tests. Desktop and 320 px browser checks cover QR rendering,
+  automatic login, persistence, sign-out and the installed-app link fallback.
+  Real iPhone scanning and Home Screen storage behavior still require confirmation.
 - Source hygiene: AGPL-3.0-only license and package metadata are present. The
   local baseline uses generic author metadata. Source scans and archive checks
   exclude known machine-specific names, credentials, databases, and build output;

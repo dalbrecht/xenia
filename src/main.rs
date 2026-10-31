@@ -23,6 +23,7 @@ use uuid::Uuid;
 mod claude_worker;
 mod codex_protocol;
 mod codex_worker;
+mod pairing;
 
 const HTML: &str = include_str!("../web/index.html");
 const JS: &str = include_str!("../web/app.js");
@@ -141,6 +142,7 @@ fn bind_outbox(db: &Connection, node: &str) -> Result<(), String> {
 }
 fn setup(path: &str) -> Result<Connection, String> {
     let db = open_private_database(path)?;
+    pairing::setup(&db)?;
     db.execute_batch("PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, name TEXT NOT NULL, repository TEXT NOT NULL); CREATE TABLE IF NOT EXISTS nodes(id TEXT PRIMARY KEY, name TEXT NOT NULL, capacity INTEGER NOT NULL, last_seen INTEGER NOT NULL, runners TEXT NOT NULL); CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, project_id TEXT NOT NULL, prompt TEXT NOT NULL, runner TEXT NOT NULL, node_id TEXT, state TEXT NOT NULL, output TEXT NOT NULL DEFAULT '', worktree TEXT, branch TEXT, created INTEGER NOT NULL, error TEXT);").map_err(|e| e.to_string())?;
     db.execute_batch("CREATE TABLE IF NOT EXISTS received_reports(id TEXT PRIMARY KEY); CREATE TABLE IF NOT EXISTS worker_credentials(node_id TEXT PRIMARY KEY, digest TEXT NOT NULL); CREATE TABLE IF NOT EXISTS cleanups(id TEXT PRIMARY KEY, job_id TEXT NOT NULL, node_id TEXT NOT NULL, worktree TEXT NOT NULL, state TEXT NOT NULL, error TEXT); CREATE TABLE IF NOT EXISTS claim_attempts(id TEXT PRIMARY KEY, node_id TEXT NOT NULL, kind TEXT NOT NULL, work_id TEXT NOT NULL, response TEXT NOT NULL);")
         .map_err(|e| e.to_string())?;
@@ -1149,7 +1151,10 @@ fn handle_api(
     supplied: &str,
     body: &[u8],
 ) -> Result<HttpResponse, String> {
-    let admin = supplied == token;
+    let admin = supplied == token || pairing::authorized(db, supplied, token)?;
+    if let Some(result) = pairing::handle(db, method, path, body, supplied, token, admin)? {
+        return Ok(result);
+    }
     let worker_node: Option<String> = if admin {
         None
     } else {

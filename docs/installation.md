@@ -79,20 +79,53 @@ tailscale serve --bg --https=8443 http://127.0.0.1:8080
 ```
 
 Use the actual local controller port if it differs. Open the HTTPS URL printed by
-Tailscale on the phone with Tailscale connected. Keep the controller token private
-and enter it only into that Xenia origin. This uses Serve within the tailnet;
+Tailscale on the phone with Tailscale connected. Use QR pairing below to sign in
+without copying the permanent controller token. This uses Serve within the tailnet;
 public Funnel is not needed. To remove just this example listener later, use
 `tailscale serve --https=8443 off`; do not reset other Serve services.
 
 On iPhone, open the verified HTTPS URL in Safari, use **Share → Add to Home
 Screen**, enable **Open as Web App** when offered, then add it. See
 [Apple's installation instructions](https://support.apple.com/guide/iphone/turn-a-website-into-an-app-iphea86e5236/ios).
-Launch Xenia from the new icon and reconnect with the controller token if needed;
-Safari and the installed web app may use separate storage. Verify a conversation,
+Launch Xenia from the new icon. Safari and the installed web app may use separate
+storage; if it asks you to connect again, use a fresh pairing link as described below. Verify a conversation,
 follow-up, cancellation, and reconnect on the actual phone before considering
 mobile setup complete. A trusted Tailscale HTTPS deployment has passed the browser
 manifest, service-worker, and offline-shell checks; that is not proof of iPhone
 installation or interaction.
+
+### Pair a phone with a QR code
+
+1. On the controller computer, open the controller's **HTTPS URL** and sign in
+   once with the controller token. Select **Pair phone**.
+2. Confirm the controller HTTPS address, then select **Show QR code**. Opening
+   Xenia using its HTTPS URL fills this address automatically. If using loopback
+   HTTP on the computer, enter the phone-reachable HTTPS origin once; Xenia
+   remembers it on that computer.
+3. Connect the phone to the same private network or Tailscale. Scan the QR with
+   the phone's Camera and open the link in Safari. Xenia signs this device in
+   automatically. A QR code cannot install or configure the phone's VPN.
+4. Use **Share → Add to Home Screen**, then launch Xenia from its icon. Verify
+   conversations load. If the installed app asks for a login because it has
+   separate storage, generate another QR on the controller, copy its **Single-use
+   pairing link** to your phone, and paste it under **Use a pairing link instead**
+   in the installed app. The link must point to that same controller origin.
+
+Each QR/link expires after two minutes and works once. Generating another code
+or closing the pairing dialog invalidates the outstanding code. Keep the dialog
+open until the phone connects. The permanent controller token is never embedded
+in the QR. Pairing grants full operator access, including running work and
+managing workers; pair only devices you trust.
+
+The paired device credential lasts 30 days and is stored in that browser's local
+storage so it survives closing the app. **Sign out** clears it locally and asks
+the controller to revoke it. If offline during sign-out, revoke it from another
+connected device under **Pair phone → Paired devices → Revoke**. This list shows
+pairing times; up to 32 active device credentials are supported. Revocation takes
+effect on the next API request. Rotating the permanent controller token
+invalidates all paired credentials and outstanding links. Clearing browser data
+also removes the local login. The controller stores credential digests in its
+private database; include that database in your usual backup policy.
 
 ### Caddy with a private certificate authority
 
@@ -123,7 +156,7 @@ A remote phone needs a secure origin for PWA installation. One possible deployme
    ```
 
    Keep Caddy running. On macOS with the default data directory, its public root certificate is `~/Library/Application Support/Caddy/pki/authorities/local/root.crt`. If `XDG_DATA_HOME` is set or Caddy runs as another account, consult `caddy environ` in that same environment and look under its `caddy.AppDataDir`. Securely transfer only `root.crt` to the phone and install and trust it using the phone's certificate settings. On iPhone, manually installed roots also require enabling full trust under **Settings → General → About → Certificate Trust Settings**; see [Apple's instructions](https://support.apple.com/en-us/102390). Protect Caddy's data directory and private keys: a trusted CA can issue certificates for other names. Do not bypass certificate warnings.
-4. Open `https://xenia.example.internal:8443` on the phone using your own hostname, enter the controller token, and use the browser's install or add-to-home-screen action. Installation behavior depends on the browser and has not yet been verified on real devices. The cached offline shell can open without a network, but conversations and queue state require the controller. The connection indicator labels previously received data when the controller is unavailable and clears after a successful refresh.
+4. Open `https://xenia.example.internal:8443` on the phone using your own hostname, sign in with QR pairing, and use the browser's install or add-to-home-screen action. Installation behavior depends on the browser and has not yet been verified on real devices. The cached offline shell can open without a network, but conversations and queue state require the controller. The connection indicator labels previously received data when the controller is unavailable and clears after a successful refresh.
 
 The browser token grants full operator access. Keep it private. A reverse proxy exposes the login page to whichever network interfaces it listens on, so configure firewall or VPN rules deliberately. A production deployment still needs a full security review, operational hardening and verified mobile installation.
 

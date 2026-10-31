@@ -2,7 +2,9 @@ const $ = selector => document.querySelector(selector);
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let state = { projects: [], nodes: [], jobs: [], now: 0 };
 let view = 'conversations', selected = null, projectFilter = '', nodeFilter = '';
-let token = sessionStorage.getItem('xenia-token') || '';
+let token = localStorage.getItem('xenia-device-token') || sessionStorage.getItem('xenia-token') || '';
+const pairingCode = new URLSearchParams(location.hash.slice(1)).get('pair');
+if (pairingCode) history.replaceState(null, '', location.pathname + location.search);
 let authGeneration = 0;
 let outputCache = {};
 let approvalCache = {};
@@ -25,6 +27,7 @@ async function api(path, body) {
   }).catch(error => { if (generation !== authGeneration) throw Error('Session ended.'); throw error; });
   if (generation !== authGeneration) throw Error('Session ended.');
   if (response.status === 401) {
+    localStorage.removeItem('xenia-device-token');
     if (!$('#auth').open) $('#auth').showModal();
     throw Error('Enter a valid controller token.');
   }
@@ -254,6 +257,8 @@ $('#jobform').onsubmit = async event => { event.preventDefault(); if (event.targ
 $('#projectform').onsubmit = async event => { event.preventDefault(); try { await api('projects', Object.fromEntries(new FormData(event.target))); event.target.reset(); $('#project-dialog').close(); await refresh(); } catch (error) { showError(error); } };
 $('#workerform').onsubmit = async event => { event.preventDefault(); try { const result = await api('workers/enroll', Object.fromEntries(new FormData(event.target))); $('#workerform').hidden = true; $('#worker-result').hidden = false; $('#worker-token').value = result.token; await refresh(); } catch (error) { showError(error); } };
 $('#sign-out').onclick = () => {
+  if (localStorage.getItem('xenia-device-token')) fetch('/api/pairing/end', {method:'POST', headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}'}).catch(() => {});
+  localStorage.removeItem('xenia-device-token');
   authGeneration++; token = ''; sessionStorage.removeItem('xenia-token');
   state = { projects: [], nodes: [], jobs: [], now: 0 }; selected = null;
   outputCache = {}; approvalCache = {}; questionDrafts = {}; approvalGeneration++;
@@ -265,9 +270,26 @@ $('#sign-out').onclick = () => {
   $('#connection').textContent = 'Signed out'; $('#connection').classList.remove('disconnected');
   view = 'conversations'; render(); $('#auth').showModal();
 };
-$('#authform').onsubmit = event => { event.preventDefault(); authGeneration++; token = new FormData(event.target).get('token'); sessionStorage.setItem('xenia-token', token); event.target.reset(); $('#auth').close(); refresh(); };
+$('#authform').onsubmit = event => { event.preventDefault(); authGeneration++; localStorage.removeItem('xenia-device-token'); token = new FormData(event.target).get('token'); sessionStorage.setItem('xenia-token', token); event.target.reset(); $('#auth').close(); refresh(); };
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
-if (!token) { $('#connection').textContent = 'Signed out'; $('#auth').showModal(); } else refresh();
+async function redeemPairing(code) {
+  $('#connection').textContent = 'Pairing this device…';
+  return api('pairing/redeem', {code}).then(result => {
+    authGeneration++; token = result.token; localStorage.setItem('xenia-device-token', token);
+    sessionStorage.removeItem('xenia-token'); if ($('#auth').open) $('#auth').close(); refresh();
+  }).catch(error => { $('#auth').showModal(); showError(error); });
+}
+$('#pair-linkform').onsubmit = event => {
+  event.preventDefault();
+  try {
+    const link = new URL(new FormData(event.target).get('link'));
+    const code = new URLSearchParams(link.hash.slice(1)).get('pair');
+    if (link.origin !== location.origin || !/^[a-f0-9]{64}$/.test(code || '')) throw Error('Use a fresh pairing link for this controller.');
+    redeemPairing(code); event.target.reset();
+  } catch(error) {showError(error);}
+};
+if (pairingCode) redeemPairing(pairingCode);
+else if (!token) { $('#connection').textContent = 'Signed out'; $('#auth').showModal(); } else refresh();
 function eligibilityFingerprint(data) {
   return JSON.stringify(data.nodes.map(n => ({id:n.id,name:n.name,runners:n.runners,eligible:n.eligible,online:data.now-n.last_seen<15})));
 }
@@ -283,3 +305,39 @@ setInterval(() => {
   if ($('#compose').open) refreshComposer();
   else if (!document.querySelector('dialog[open]')) refresh();
 }, 5000);
+
+let pairingTimer;
+async function loadPairedDevices() {
+  const devices = await api('pairing/devices', {});
+  $('#paired-devices').replaceChildren();
+  if (!devices.length) { $('#paired-devices').textContent = 'No paired devices.'; return; }
+  for (const device of devices) {
+    const row = document.createElement('p'), button = document.createElement('button');
+    row.textContent = 'Paired ' + new Date(device.created * 1000).toLocaleString() + ' ';
+    button.className = 'secondary'; button.textContent = 'Revoke';
+    button.onclick = async () => { try { await api('pairing/revoke', {id:device.id}); await loadPairedDevices(); } catch(error) {showError(error);} };
+    row.append(button); $('#paired-devices').append(row);
+  }
+}
+$('#pair-phone').onclick = () => {
+  $('#pair-form').hidden = false; $('#pair-result').hidden = true;
+  $('#pair-form input').value = location.protocol === 'https:' ? location.origin : localStorage.getItem('xenia-pair-origin') || '';
+  $('#pair-dialog').showModal(); loadPairedDevices().catch(showError);
+};
+$('#pair-form').onsubmit = async event => {
+  event.preventDefault(); const origin = String(new FormData(event.target).get('origin') || '').trim();
+  const button = event.submitter; button.disabled = true;
+  try {
+    const result = await api('pairing/create', {origin});
+    if (!$('#pair-dialog').open) { await api('pairing/cancel', {}); return; }
+    $('#pair-link').value = result.url;
+    localStorage.setItem('xenia-pair-origin', origin);
+    $('#pair-qr').src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(result.svg);
+    $('#pair-form').hidden = true; $('#pair-result').hidden = false;
+    clearInterval(pairingTimer);
+    const tick = () => { const seconds = Math.max(0, result.expires - Math.floor(Date.now()/1000)); $('#pair-expiry').textContent = seconds ? 'Scan within ' + seconds + ' seconds. This code works once.' : 'Code expired. Generate another code.'; if(!seconds) {$('#pair-qr').removeAttribute('src');clearInterval(pairingTimer);} };
+    tick(); pairingTimer = setInterval(tick, 1000);
+  } catch(error) {showError(error);} finally {button.disabled = false;}
+};
+$('#pair-new').onclick = () => {api('pairing/cancel',{}).catch(showError);clearInterval(pairingTimer); $('#pair-qr').removeAttribute('src');$('#pair-result').hidden=true;$('#pair-form').hidden=false;loadPairedDevices().catch(showError);};
+$('#pair-dialog').addEventListener('close', () => {clearInterval(pairingTimer);$('#pair-qr').removeAttribute('src');$('#pair-link').value='';api('pairing/cancel',{}).catch(()=>{});});

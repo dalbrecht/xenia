@@ -68,6 +68,8 @@ Serve a web app manifest and service worker for installation and caching of stat
 
 ## Security and privacy
 
+Phone enrollment uses an operator-created HTTPS link with a random code in its URL fragment. The PWA removes that fragment immediately and exchanges the code through a POST request. SQLite atomically consumes a digest of the code within its two-minute lifetime and issues a separate 30-day operator credential. Device credentials are stored as digests, bound to the current root-token digest, capped at 32, and revocable. The browser retains its device credential in local storage; static service-worker caching excludes the API. QR generation is local Rust/SVG with no external QR service. Pairing supplies the controller address and authentication; private-network/VPN connectivity remains an operating-system prerequisite.
+
 A trusted private network is the deployment assumption, not an identity mechanism. Authenticate PWA users and workers, encrypt connections where practical, and provide a revocable enrollment mechanism. Define credential storage, rotation, and recovery before implementation. Runner credentials stay on their worker; do not send them to the controller. Explicitly document the execution privileges and repository access granted to runners. Enforce supported runner permission modes and expose approval requests where feasible.
 
 Conversation output and repository paths can contain sensitive material. Restrict access to persisted state and logs, avoid logging secrets, and document retention and deletion behavior. Use generic examples and synthetic test data throughout the public repository; do not commit real hostnames, usernames, tokens, personal paths, or conversation transcripts.
