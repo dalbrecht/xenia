@@ -20,7 +20,10 @@ supported release behavior. No public release tag has been created.
   signature verification, and installed start/stop checks have passed. A rebuilt
   installed bundle's engine also passed the standard synthetic integration suite,
   including concurrent worktrees, replay, cancellation and graceful shutdown; this
-  CLI evidence is separate from desktop credential/launch verification. Windows
+  CLI evidence is separate from desktop credential/launch verification. The
+  updated native app also loaded its existing Keychain credential, started the
+  bundled worker, rejoined the controller, and reported both supported runners
+  with the registered checkout eligible. Windows
   WPF cross-compilation has passed; native build, installation, credentials,
   tunnel recovery, and runtime checks are outstanding.
 - Browser regressions: a pinned development-only Playwright setup runs nine
