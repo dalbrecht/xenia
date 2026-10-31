@@ -71,7 +71,7 @@ with tempfile.TemporaryDirectory(prefix="xenia-proxy-") as tmp:
         assert wrong_name.returncode != 0, "TLS accepted an incorrect hostname"
         print("HTTPS proxy, certificate validation, authentication, API and PWA assets: PASS")
         if os.environ.get("XENIA_PWA_BROWSER_TEST"):
-            browser_env = os.environ | {"XENIA_HTTPS_TEST_URL": f"https://{host}:{proxy_port}/", "XENIA_HTTPS_TEST_TOKEN": token}
+            browser_env = os.environ | {"XENIA_HTTPS_TEST_URL": f"https://{host}:{proxy_port}/", "XENIA_HTTPS_TEST_TOKEN": token, "XENIA_HTTPS_TEST_SELF_SIGNED": "1"}
             subprocess.run(["node", "tests/https_pwa.cjs"], env=browser_env, check=True)
     finally:
         for process in reversed(processes):

@@ -4,12 +4,13 @@ const { chromium } = require('playwright');
 (async () => {
   const url = process.env.XENIA_HTTPS_TEST_URL;
   const executablePath = process.env.XENIA_CHROMIUM_BIN || undefined;
-  const browser = await chromium.launch({headless:true, executablePath, args:['--host-resolver-rules=MAP xenia.example.internal 127.0.0.1', '--ignore-certificate-errors']});
+  const selfSigned = process.env.XENIA_HTTPS_TEST_SELF_SIGNED === '1';
+  const browser = await chromium.launch({headless:true, executablePath, args:selfSigned ? ['--host-resolver-rules=MAP xenia.example.internal 127.0.0.1', '--ignore-certificate-errors'] : []});
   try {
     // The proxy test separately verifies the temporary CA with curl. Browser
     // certificate errors are ignored only in this disposable browser so the
     // test does not modify the host's trust store.
-    const context = await browser.newContext({ignoreHTTPSErrors:true, viewport:{width:390,height:844}});
+    const context = await browser.newContext({ignoreHTTPSErrors:selfSigned, viewport:{width:390,height:844}});
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));

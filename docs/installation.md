@@ -66,6 +66,36 @@ Open `http://127.0.0.1:8080/` on the controller machine and enter the token. It 
 
 ## Access from a phone over HTTPS
 
+### Existing Tailscale network
+
+If the controller and phone already use the same Tailscale network, [Tailscale
+Serve](https://tailscale.com/docs/features/tailscale-serve) can provide private
+HTTPS while Xenia stays bound to loopback. Inspect `tailscale serve status` first
+and choose an unused HTTPS port so another service is preserved. For a controller
+on its default port, one example is:
+
+```sh
+tailscale serve --bg --https=8443 http://127.0.0.1:8080
+```
+
+Use the actual local controller port if it differs. Open the HTTPS URL printed by
+Tailscale on the phone with Tailscale connected. Keep the controller token private
+and enter it only into that Xenia origin. This uses Serve within the tailnet;
+public Funnel is not needed. To remove just this example listener later, use
+`tailscale serve --https=8443 off`; do not reset other Serve services.
+
+On iPhone, open the verified HTTPS URL in Safari, use **Share → Add to Home
+Screen**, enable **Open as Web App** when offered, then add it. See
+[Apple's installation instructions](https://support.apple.com/guide/iphone/turn-a-website-into-an-app-iphea86e5236/ios).
+Launch Xenia from the new icon and reconnect with the controller token if needed;
+Safari and the installed web app may use separate storage. Verify a conversation,
+follow-up, cancellation, and reconnect on the actual phone before considering
+mobile setup complete. A trusted Tailscale HTTPS deployment has passed the browser
+manifest, service-worker, and offline-shell checks; that is not proof of iPhone
+installation or interaction.
+
+### Caddy with a private certificate authority
+
 A remote phone needs a secure origin for PWA installation. One possible deployment uses Caddy as an HTTPS reverse proxy on the controller machine while Xenia remains bound to loopback. A disposable loopback test with Caddy 2.11.7 verified the proxy and certificate chain; phone installation and network configuration still need verification on your devices. Follow the [Caddy reverse-proxy guide](https://caddyserver.com/docs/quick-starts/reverse-proxy) and [internal TLS documentation](https://caddyserver.com/docs/caddyfile/directives/tls), and restrict access to your private network with your firewall or VPN.
 
 1. Give the controller a private DNS name that resolves from the phone and install Caddy using its official instructions.

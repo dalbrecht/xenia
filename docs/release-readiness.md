@@ -6,7 +6,7 @@ supported release behavior. No public release tag has been created.
 
 | Acceptance criterion | Current evidence | Remaining verification |
 | --- | --- | --- |
-| Phone submission and progress | Browser interaction checks at a 390 px viewport; HTTPS proxy and service-worker tests | Install on a real phone over the intended private network, submit work, follow output, reconnect, and follow up |
+| Phone submission and progress | Browser interaction checks at a 390 px viewport; HTTPS proxy and service-worker tests; installed private HTTPS endpoint passed with certificate validation | Install on a real phone over the intended private network, submit work, follow output, reconnect, and follow up |
 | Isolated concurrent worktrees | Synthetic integration tests exercise parallel work and preserve the main checkout; installed macOS runner checks preserve checkout state | Repeat with native Windows runners and the intended multi-node deployment |
 | Capacity and explicit node assignment | Controller tests and local integration exercise capacity, offline assignment, and checkout eligibility | Exercise two physical nodes, including lowering capacity while jobs run |
 | Durable history and recovery | Controller-restart, lost-response, outbox replay, and instance-fencing tests; uncertain work requires explicit inspection | Native Windows crash and restart checks; document any platform-specific process survival |
