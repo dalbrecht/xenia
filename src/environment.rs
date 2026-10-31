@@ -332,6 +332,17 @@ fn container(
         "--env",
         &format!("GIT_CONFIG_VALUE_0={workspace}"),
     ]);
+    // Bind-mounted Git metadata must remain writable by the node account.
+    // Windows file sharing maps ownership; Unix engines need the host UID/GID.
+    #[cfg(unix)]
+    {
+        argv.extend(args(&[
+            "--user",
+            &format!("{}:{}", unsafe { libc::geteuid() }, unsafe {
+                libc::getegid()
+            }),
+        ]));
+    }
     for key in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"] {
         if std::env::var_os(key).is_some() {
             argv.extend(args(&["--env", key]));

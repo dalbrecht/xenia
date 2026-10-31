@@ -92,8 +92,9 @@ fail preparation rather than copying or silently running different code.
 Provide an image tag or `@sha256:` digest. Install Docker separately and configure
 registry authentication locally. Xenia uses a local image if present and pulls
 it if absent; pin a digest for reproducibility. The image must support `sh`,
-contain Git and the desired Codex/Claude CLI(s), and let its default user write
-`/xenia-home`. The runner must also be enabled and discoverable on the native
+contain Git and the desired Codex/Claude CLI(s), and let the runtime user write
+`/xenia-home`. On Unix nodes Xenia uses the host UID/GID to preserve ownership of
+bind-mounted Git files; provision that home directory accordingly in the image. The runner must also be enabled and discoverable on the native
 node for its current capability reporting. An optional shell setup script runs
 inside the container when the workspace container is first created.
 

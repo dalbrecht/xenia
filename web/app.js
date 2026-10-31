@@ -165,7 +165,7 @@ function assignmentCard(a) {
 }
 function projectCard(p) {
   const assignments=(state.assignments || []).filter(a => a.project_id === p.id && a.state !== 'removed');
-  return `<article class="project-card"><div class="project-heading"><div><h3>${escapeHtml(p.name)} / ${escapeHtml(p.repository)}</h3><small>${escapeHtml(p.environment?.mode || 'Manual checkout')} ${p.environment ? `· ${escapeHtml(p.environment.ref)}` : ''}</small></div><div class="assignment-actions"><button class="secondary" data-environment="${escapeHtml(p.id)}">Environment</button><button class="primary" data-assign="${escapeHtml(p.id)}" ${p.environment ? '' : 'disabled title="Configure the project environment first"'}>Assign node</button></div></div>${assignments.map(assignmentCard).join('')}</article>`;
+  return `<article class="project-card"><div class="project-heading"><div><h3><span>${escapeHtml(p.name)}</span> / <span>${escapeHtml(p.repository)}</span></h3><small>${escapeHtml(p.environment?.mode || 'Manual checkout')} ${p.environment ? `· ${escapeHtml(p.environment.ref)}` : ''}</small></div><div class="assignment-actions"><button class="secondary" data-environment="${escapeHtml(p.id)}">Environment</button><button class="primary" data-assign="${escapeHtml(p.id)}" ${p.environment ? '' : 'disabled title="Configure the project environment first"'}>Assign node</button></div></div>${assignments.map(assignmentCard).join('')}</article>`;
 }
 function render() {
   $('#title').textContent = { conversations:'Conversations', queue:'Work queue', nodes:'Nodes', projects:'Projects' }[view];

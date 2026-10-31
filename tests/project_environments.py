@@ -36,7 +36,7 @@ else:
     image='xenia-fixture-'+uuid.uuid4().hex[:12]
     if docker:
         context=root/'image';context.mkdir();(context/'codex').write_text('#!/usr/bin/env python3\n'+runner);(context/'codex').chmod(0o755)
-        (context/'Dockerfile').write_text('FROM python:3.12-alpine\nRUN apk add --no-cache git\nCOPY codex /usr/local/bin/codex\n')
+        (context/'Dockerfile').write_text('FROM python:3.12-alpine\nRUN apk add --no-cache git && mkdir -p /xenia-home && chmod 1777 /xenia-home\nCOPY codex /usr/local/bin/codex\n')
         subprocess.run(['docker','build','-q','-t',image,str(context)],check=True)
         (source/'.xenia/compose.yaml').write_text(f'services:\n  dependency:\n    image: {image}\n    command: ["sh", "-c", "while :; do sleep 3600; done"]\n')
     def git(*args):return subprocess.check_output(['git','-C',str(source),*args],text=True).strip()
@@ -110,6 +110,8 @@ else:
             cancelpath=pathlib.Path(state(cancel)['worktree']);containers.append(cancelpath)
             api('cancel',{'id':cancel});until(lambda:state(cancel)['state'] in ['canceled','failed','unknown'],60);assert state(cancel)['state']=='canceled',state(cancel)
             api('cleanup',{'id':cancel});until(lambda:state(cancel)['cleanup_state'] in ['succeeded','failed'],90);assert state(cancel)['cleanup_state']=='succeeded',state(cancel);assert not cancelpath.exists()
+            if mode=='container' and os.name=='posix':
+                assert all(path.stat().st_uid==os.geteuid() for path in (checkout/'.git').rglob('*') if not path.is_symlink()), 'container changed ownership of host Git metadata'
             api('projects/unassign',{'project_id':project,'node_id':'allowed'});assert checkout.exists()
             print(mode+': clone, pinned revision, setup in worktrees, scheduling, follow-up, cancellation, cleanup and preserved checkout: PASS',flush=True)
         print('Local permissions, source/path validation, capacity ceiling and worker authorization: PASS')
