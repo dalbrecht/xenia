@@ -40,10 +40,11 @@ for path in "${HOME-}" "$PWD"; do
 done
 cp target/release/xenia "$APP/Contents/MacOS/xenia-engine"
 cp LICENSE "$APP/Contents/Resources/LICENSE"
+cp assets/xenia.icns "$APP/Contents/Resources/Xenia.icns"
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict><key>CFBundleExecutable</key><string>XeniaWorker</string><key>CFBundleIdentifier</key><string>org.xenia.worker</string><key>CFBundleName</key><string>Xenia Worker</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleShortVersionString</key><string>0.1.0</string><key>LSMinimumSystemVersion</key><string>13.0</string><key>NSHighResolutionCapable</key><true/></dict></plist>
+<plist version="1.0"><dict><key>CFBundleExecutable</key><string>XeniaWorker</string><key>CFBundleIdentifier</key><string>org.xenia.worker</string><key>CFBundleName</key><string>Xenia Worker</string><key>CFBundleIconFile</key><string>Xenia</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleShortVersionString</key><string>0.1.0</string><key>LSMinimumSystemVersion</key><string>13.0</string><key>NSHighResolutionCapable</key><true/></dict></plist>
 PLIST
 # Use a consistent local identity when configured; otherwise ad-hoc sign.
 # The identity is supplied locally and is never stored in the source tree.

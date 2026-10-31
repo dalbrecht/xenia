@@ -6,5 +6,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>XeniaWorker</AssemblyName>
+    <ApplicationIcon>../../assets/xenia.ico</ApplicationIcon>
   </PropertyGroup>
 </Project>
