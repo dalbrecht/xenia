@@ -149,10 +149,14 @@ function workRow(id, jobs) {
 function filters() {
   return `<div class="filters"><label>Project <select id="project-filter" aria-label="Project filter"><option value="">All projects</option>${state.projects.map(p => `<option value="${escapeHtml(p.id)}" ${projectFilter === p.id ? 'selected' : ''}>${escapeHtml(p.name)} / ${escapeHtml(p.repository)}</option>`).join('')}</select></label><label>Node <select id="node-filter" aria-label="Node filter"><option value="">All nodes</option>${state.nodes.map(n => `<option value="${escapeHtml(n.id)}" ${nodeFilter === n.id ? 'selected' : ''}>${escapeHtml(n.name)}</option>`).join('')}</select></label></div>`;
 }
+function enrollmentRequests() {
+  const requests = state.enrollments || [];
+  return `<section class="enrollment-requests"><h2>Connect a worker</h2><p>In the desktop worker, enter this controller’s HTTPS address and choose Request access. Compare its code here before approving. Requests expire after five minutes. Device names and platforms are self-reported.</p><label>Controller address<input aria-label="Worker controller address" readonly value="${escapeHtml(location.origin)}"></label>${requests.map(r => `<article class="enrollment-card"><div><strong>${escapeHtml(r.name)}</strong><small>${escapeHtml(r.node_id)} · ${escapeHtml(r.platform)}</small></div><code class="enrollment-code">${escapeHtml(r.code)}</code><small>Expires ${escapeHtml(new Date(r.expires * 1000).toLocaleTimeString())}</small>${r.state === 'approved' ? '<span class="status running">Approved · waiting for worker</span>' : `<div class="enrollment-actions"><button class="primary" data-enrollment="${escapeHtml(r.id)}" data-decision="approved">Approve worker</button><button class="secondary" data-enrollment="${escapeHtml(r.id)}" data-decision="rejected">Reject</button></div>`}</article>`).join('')}</section>`;
+}
 function render() {
   $('#title').textContent = { conversations:'Conversations', queue:'Work queue', nodes:'Nodes', projects:'Projects' }[view];
   document.querySelectorAll('nav button').forEach(button => button.classList.toggle('selected', button.dataset.view === view));
-  $('#new').textContent = view === 'projects' ? '+ Add project' : view === 'nodes' ? '+ Enroll worker' : '+ New work';
+  $('#new').textContent = view === 'projects' ? '+ Add project' : view === 'nodes' ? '+ Connect worker' : '+ New work';
   let html = '';
   if (view === 'conversations' || view === 'queue') {
     const rows = view === 'queue' ? state.jobs.map(job => ({ id: job.id, jobs: [job] })) : groups();
@@ -163,6 +167,7 @@ function render() {
     html += pageControls('work', state, workspaceHistory);
   } else if (view === 'nodes') {
     html = `<div class="section-heading"><div><h2>Worker nodes</h2><p>Machines available to run your agents.</p></div><span class="count">${state.nodes.length} total</span></div>` + (state.nodes.length ? `<div class="work-list">${state.nodes.map(n => `<div class="work-row node-row"><span class="job-icon node-icon">▣</span><span class="job-main"><strong>${escapeHtml(n.name)}</strong><small>${escapeHtml(JSON.parse(n.runners).join(', ') || 'No runners detected')} · ${n.occupied ?? 0} / ${n.capacity} occupied</small></span>${status(state.now - n.last_seen < 15 ? 'online' : 'offline')}<button data-capacity="${escapeHtml(n.id)}" class="secondary">Set capacity</button><button data-revoke="${escapeHtml(n.id)}" class="secondary">Revoke</button></div>`).join('')}</div>` : '<div class="empty"><h3>No nodes connected</h3><p>Start a worker to make it available here.</p></div>');
+    html = enrollmentRequests() + html;
   } else {
     html = `<div class="section-heading"><div><h2>Projects</h2><p>Repositories available for agent work.</p></div><span class="count">${state.projects.length} total</span></div>` + (state.projects.length ? `<div class="work-list">${state.projects.map(p => `<div class="work-row"><span class="job-icon">▤</span><span class="job-main"><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.repository)}</small></span></div>`).join('')}</div>` : '<div class="empty"><h3>No projects yet</h3><p>Add a project and repository to get started.</p><button class="secondary" id="empty-action">Add a project</button></div>');
   }
@@ -177,6 +182,15 @@ function render() {
   document.querySelectorAll('[data-work-page]').forEach(b => b.onclick = () => changeWorkspacePage(b.dataset.workPage));
   document.querySelectorAll('[data-turn-page]').forEach(b => b.onclick = () => changeTurnPage(b.dataset.turnPage).catch(showError));
   if ($('#empty-action')) $('#empty-action').onclick = () => $('#project-dialog').showModal();
+  document.querySelectorAll('[data-enrollment]').forEach(b => b.onclick = async () => {
+    const request = (state.enrollments || []).find(r => r.id === b.dataset.enrollment);
+    if (!request) return;
+    const approved = b.dataset.decision === 'approved';
+    if (!window.confirm(approved ? `Approve ${request.name} (${request.node_id})? Compare code ${request.code} with the worker app first. Approve only if both codes match and you initiated this request.` : `Reject the request from ${request.name}?`)) return;
+    b.disabled = true;
+    try { await api('node-pairing/decide', {id:request.id, code:request.code, decision:b.dataset.decision}); await refresh(); }
+    catch (error) { showError(error); b.disabled = false; }
+  });
   document.querySelectorAll('[data-capacity]').forEach(b => b.onclick = () => { const value = window.prompt('Maximum simultaneous jobs (1–64)'); if (value !== null) act('nodes/capacity', { id:b.dataset.capacity, capacity:Number(value) }); });
   document.querySelectorAll('[data-revoke]').forEach(b => b.onclick = () => { if (window.confirm('Revoke this worker credential? The worker will lose access, including the ability to report running work.')) act('workers/revoke', { id:b.dataset.revoke }); });
   document.querySelectorAll('[data-cleanup]').forEach(b => b.onclick = () => { if (window.confirm('Remove this worktree? Git will refuse if it contains uncommitted changes. The branch will be kept.')) act('cleanup', { id:b.dataset.cleanup }); });
@@ -278,7 +292,7 @@ async function changeOutputPage(id, direction) {
   render();
 }
 function fingerprint(data) {
-  return JSON.stringify({projects:data.projects,jobs:data.jobs,total:data.total,has_more:data.has_more,nodes:data.nodes.map(({last_seen,...node}) => ({...node,online:data.now-last_seen<15}))});
+  return JSON.stringify({projects:data.projects,jobs:data.jobs,total:data.total,has_more:data.has_more,enrollments:data.enrollments,nodes:data.nodes.map(({last_seen,...node}) => ({...node,online:data.now-last_seen<15}))});
 }
 async function refresh() {
   const generation = workspaceGeneration, request = ++workspaceRequest;

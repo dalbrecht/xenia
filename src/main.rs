@@ -23,8 +23,10 @@ use uuid::Uuid;
 mod claude_worker;
 mod codex_protocol;
 mod codex_worker;
+mod enrollment;
 mod history;
 mod pairing;
+mod transport;
 
 const HTML: &str = include_str!("../web/index.html");
 const JS: &str = include_str!("../web/app.js");
@@ -147,6 +149,7 @@ fn setup(path: &str) -> Result<Connection, String> {
     db.execute_batch("PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, name TEXT NOT NULL, repository TEXT NOT NULL); CREATE TABLE IF NOT EXISTS nodes(id TEXT PRIMARY KEY, name TEXT NOT NULL, capacity INTEGER NOT NULL, last_seen INTEGER NOT NULL, runners TEXT NOT NULL); CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, project_id TEXT NOT NULL, prompt TEXT NOT NULL, runner TEXT NOT NULL, node_id TEXT, state TEXT NOT NULL, output TEXT NOT NULL DEFAULT '', worktree TEXT, branch TEXT, created INTEGER NOT NULL, error TEXT);").map_err(|e| e.to_string())?;
     db.execute_batch("CREATE TABLE IF NOT EXISTS received_reports(id TEXT PRIMARY KEY); CREATE TABLE IF NOT EXISTS worker_credentials(node_id TEXT PRIMARY KEY, digest TEXT NOT NULL); CREATE TABLE IF NOT EXISTS cleanups(id TEXT PRIMARY KEY, job_id TEXT NOT NULL, node_id TEXT NOT NULL, worktree TEXT NOT NULL, state TEXT NOT NULL, error TEXT); CREATE TABLE IF NOT EXISTS claim_attempts(id TEXT PRIMARY KEY, node_id TEXT NOT NULL, kind TEXT NOT NULL, work_id TEXT NOT NULL, response TEXT NOT NULL);")
         .map_err(|e| e.to_string())?;
+    enrollment::setup(&db)?;
     db.execute_batch("CREATE TABLE IF NOT EXISTS approval_requests(id TEXT PRIMARY KEY, job_id TEXT NOT NULL, node_id TEXT NOT NULL, instance_id TEXT NOT NULL, kind TEXT NOT NULL, details TEXT NOT NULL, decision TEXT, created INTEGER NOT NULL, decided INTEGER); CREATE INDEX IF NOT EXISTS approval_requests_job ON approval_requests(job_id,created);").map_err(|e| e.to_string())?;
     for sql in [
         "ALTER TABLE jobs ADD COLUMN parent_id TEXT",
@@ -1045,7 +1048,10 @@ fn controller() -> Result<(), String> {
         .parse()
         .map_err(|_| "XENIA_LISTEN must be a numeric loopback address and port")?;
     if !listen_address.ip().is_loopback() {
-        return Err("Controller must bind loopback; use SSH tunneling for remote access".into());
+        return Err(
+            "Controller must bind loopback; use a trusted HTTPS reverse proxy for remote access"
+                .into(),
+        );
     }
     let db = Arc::new(Mutex::new(setup(
         &env::var("XENIA_DB").unwrap_or("xenia.db".into()),
@@ -1186,6 +1192,9 @@ fn handle_api(
     if let Some(result) = pairing::handle(db, method, path, body, supplied, token, admin)? {
         return Ok(result);
     }
+    if let Some(result) = enrollment::handle(db, method, path, body, supplied, token, admin)? {
+        return Ok(result);
+    }
     let worker_node: Option<String> = if admin {
         None
     } else {
@@ -1243,45 +1252,19 @@ fn handle_api(
         }
     }
     Ok(match api(db, method, path, v) {
-        Ok(v) => response(200, v.to_string(), "application/json"),
+        Ok(mut v) => {
+            if path == "/api/workspace" {
+                v["enrollments"] =
+                    enrollment::pending(&*db.lock().map_err(|e| e.to_string())?, token)?;
+            }
+            response(200, v.to_string(), "application/json")
+        }
         Err(error) => response(400, json!({"error":error}).to_string(), "application/json"),
     })
 }
 
 fn post(url: &str, token: &str, path: &str, body: Value) -> Result<Value, String> {
-    use std::io::{Read, Write};
-    let authority = url
-        .strip_prefix("http://")
-        .ok_or("Expected http:// URL")?
-        .trim_end_matches('/');
-    if authority.contains('/') {
-        return Err("Controller URL must not contain a path".into());
-    }
-    let address = if authority.contains(':') {
-        authority.to_string()
-    } else {
-        format!("{authority}:80")
-    };
-    let mut stream = std::net::TcpStream::connect(address).map_err(|e| e.to_string())?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(15)))
-        .map_err(|e| e.to_string())?;
-    stream
-        .set_write_timeout(Some(Duration::from_secs(15)))
-        .map_err(|e| e.to_string())?;
-    let payload = body.to_string();
-    write!(stream,"POST {path} HTTP/1.1\r\nHost: {authority}\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}",payload.len()).map_err(|e|e.to_string())?;
-    let mut response = String::new();
-    stream
-        .read_to_string(&mut response)
-        .map_err(|e| e.to_string())?;
-    let (headers, body) = response
-        .split_once("\r\n\r\n")
-        .ok_or("Invalid HTTP response")?;
-    if !headers.lines().next().unwrap_or("").contains(" 200 ") {
-        return Err(format!("Controller rejected request: {body}"));
-    }
-    serde_json::from_str(body).map_err(|e| e.to_string())
+    transport::post(url, token, path, body)
 }
 fn scrub_xenia_env(command: &mut Command) {
     for (key, _) in env::vars_os() {
@@ -2094,18 +2077,7 @@ fn cleanup(item: &Value, root: &Path) -> Result<(), String> {
 fn worker() -> Result<(), String> {
     let token = config("XENIA_WORKER_TOKEN")?;
     let url = config("XENIA_CONTROLLER")?;
-    if !url.starts_with("http://") {
-        return Err("This prototype requires an http:// controller URL".into());
-    }
-    let authority = url
-        .strip_prefix("http://")
-        .unwrap_or("")
-        .split(':')
-        .next()
-        .unwrap_or("");
-    if authority != "127.0.0.1" && authority != "localhost" {
-        return Err("Worker controller URL must use loopback; use an SSH tunnel".into());
-    }
+    transport::validate(&url)?;
     let node = config("XENIA_NODE_ID")?;
     if !component(&node) || node.len() > 128 {
         return Err("Node ID must be a simple name".into());
@@ -2300,7 +2272,8 @@ fn main() {
     let result = match env::args().nth(1).as_deref() {
         Some("controller") => controller(),
         Some("worker") => worker(),
-        _ => Err("Usage: xenia controller|worker".into()),
+        Some("pair") => enrollment::pair_cli(),
+        _ => Err("Usage: xenia controller|worker|pair".into()),
     };
     if let Err(e) = result {
         eprintln!("{e}");

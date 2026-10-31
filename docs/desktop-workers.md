@@ -1,6 +1,6 @@
 # Desktop workers
 
-Xenia's worker engine can be controlled through native desktop applications on macOS and Windows. The app starts the worker and, if configured, an SSH tunnel to the controller. **Stop worker** stops accepting new work and waits for active jobs to finish; the app stays open while it drains. Cancel an individual job in the web interface if it needs to stop sooner. Pending reports remain in the worker database for the next start if the controller is unavailable.
+Xenia's worker engine can be controlled through native desktop applications on macOS and Windows. The app connects the worker directly to the controller over HTTPS. An optional legacy SSH tunnel remains available. **Stop worker** stops accepting new work and waits for active jobs to finish; the app stays open while it drains. Cancel an individual job in the web interface if it needs to stop sooner. Pending reports remain in the worker database for the next start if the controller is unavailable.
 
 These applications are early builds. The macOS app has been built and tested with a synthetic local controller, including connection and start/stop controls. A staged release bundle was built, replaced, and ad-hoc signature-verified in a disposable checkout; its bundled engine passed synthetic Codex and Claude control integration tests. The Windows WPF application has been cross-built, but the Windows engine, SSH integration, installation, and runtime have not yet been tested on a Windows machine. The macOS build is ad-hoc signed but not Developer ID signed or notarized; the Windows package is unsigned, and there is no automatic updater or operating-system service. Do not treat these as release-ready installers.
 
@@ -8,10 +8,25 @@ These applications are early builds. The macOS app has been built and tested wit
 
 1. Install Git, Rust/Cargo, and at least one of Codex CLI or Claude Code; authenticate the runner as the worker user. Confirm that `git`, `codex`, and/or `claude` work in a terminal. Runner credentials stay on the worker.
 2. Prepare Git checkouts at `<projects root>/<project>/<repository>`, each with a commit. Use disposable projects until the remaining recovery and security work is complete.
-3. In the controller's web app, choose **Nodes → Enroll worker**, enter a unique ID, and copy its one-time credential. Share the credential securely with the worker owner. Do not use the controller token as a worker credential.
-4. For a remote worker, install and configure the OpenSSH client, verify the controller's SSH host key, and configure key-based, noninteractive login before using the desktop app. Test it in a terminal first. The app starts `ssh` with `BatchMode=yes`; it cannot answer a password, key-passphrase, or host-trust prompt. SSH access and port forwarding must be permitted on the controller. The SSH destination uses normal SSH client configuration, including a configured username and key.
+3. Enter a unique **Node ID**, node name, projects directory and capacity in the desktop app. Set **Controller URL** to the controller's HTTPS origin, for example `https://controller.example.ts.net:8443`. Connect the computer to the same private network/VPN first.
+4. Select **Request access**. In the controller web app's **Nodes** view, compare the eight-character code with the worker's code and choose **Approve worker**. Names and platforms are self-reported; approve only a matching request you initiated. Requests expire after five minutes. No credential needs to be copied.
+5. Wait for the desktop app to confirm the credential was saved in Keychain or Windows Credential Manager, then select **Start worker**. Confirm the worker is online in **Nodes**. Existing node IDs cannot be overwritten; revoke an old credential only after stopping and inspecting its worker. Cancellation and expiry do not erase an existing enrollment.
 
-### Prepare a Mac controller for a remote worker
+The worker generates a random credential locally, sends its digest in the request,
+and activates it by proving possession after approval. The HTTPS server certificate
+and hostname are verified. Redirects are refused. The HTTP controller remains on
+loopback behind your HTTPS proxy; do not expose its raw port. See the
+[node enrollment protocol](node-enrollment.md) for lifecycle and limits.
+
+### Optional legacy SSH connections
+
+Leave **Controller URL** blank to use the original local-port settings. For a
+remote SSH tunnel, configure the OpenSSH client, verify the host key and set up
+noninteractive key-based login separately. The app uses `BatchMode=yes` and cannot
+answer password, passphrase or host-trust prompts. **Controller URL** takes
+precedence over these settings; SSH and Remote Login are not required for HTTPS.
+
+### Prepare a Mac controller for legacy SSH
 
 The HTTPS address used by the phone and the SSH endpoint used by a worker are
 separate services. A working phone login does not prove SSH is available.
@@ -63,7 +78,7 @@ Both desktop apps have separate **Interactive Codex approvals** and **Interactiv
 
 2. The app is `dist/XeniaWorker.app`. Move or copy it to a user-controlled Applications folder if desired, taking care not to overwrite an existing installation. The build is ad-hoc signed but not Developer ID signed or notarized; distribution signing and Gatekeeper-ready packaging are not yet provided.
 3. Open **Xenia Worker**. Enter the enrolled **Node ID**, a display name, projects directory, and credential. The credential is saved in macOS Keychain; other settings are stored in user preferences. The bundled engine stores its database and log in `~/Library/Application Support/XeniaWorker/`.
-4. For a controller on the same Mac, leave **SSH host** blank and use local controller port `8080`. For a remote controller, enter its SSH destination and a free local port such as `18080`; the tunnel forwards that local port to the configured controller port on the SSH host, `8080` by default.
+4. For a controller on the same Mac, leave **SSH host** blank and use local controller port `8080`. For a remote controller, use its HTTPS URL and the request/approval flow above. The port settings apply only when Controller URL is blank.
 5. If the agent executable is outside the usual user and Homebrew paths, put its directory in **Additional runner PATH**. Select **Start worker**. The menu-bar item also provides start and stop controls once configuration is saved. Select **Stop worker** and wait for the status to become stopped before quitting.
 
 Both the app build script and `./script/build_and_run.sh --verify` refuse to rebuild while a Xenia Worker process is running or if they cannot check its status. The build stages and signs a replacement before publishing it; if publishing fails it attempts to restore the previous bundle. Stop active work and quit the worker before rebuilding.
@@ -72,7 +87,7 @@ For local development, `XENIA_SIGNING_IDENTITY` can select an existing code-sign
 
 ## Windows
 
-1. Transfer a copy of the source tree to Windows over a trusted channel. From the controller source tree, `./scripts/make-source-archive.sh` creates `dist/xenia-source.tar.gz` without build output, databases, or the Git directory. Extract it on Windows. Install Git for Windows, Rust using the Windows MSVC toolchain, Visual Studio C++ Build Tools, the .NET 8 SDK, and the desired agent CLI(s). OpenSSH Client must be installed and available on `PATH` for a remote controller. Verify the setup in PowerShell.
+1. Transfer a copy of the source tree to Windows over a trusted channel. From the controller source tree, `./scripts/make-source-archive.sh` creates `dist/xenia-source.tar.gz` without build output, databases, or the Git directory. Extract it on Windows. Install Git for Windows, Rust using the Windows MSVC toolchain, Visual Studio C++ Build Tools, the .NET 8 SDK, and the desired agent CLI(s). OpenSSH Client is needed only if you choose legacy SSH tunneling. Verify the setup in PowerShell.
 2. From the source repository in PowerShell, build and install the x64 app:
 
    ```powershell
@@ -82,8 +97,8 @@ For local development, `XENIA_SIGNING_IDENTITY` can select an existing code-sign
 
    The build creates `dist\windows-worker`; the installer copies it to the current user's Local AppData Programs folder and creates a Start-menu shortcut. It does not require administrator rights. The installer stages and SHA-256 verifies the package before replacing that destination. Stop active work and quit the app before updating; the installer refuses a running app or engine. New app versions and the installer share an exclusive lock, which also prevents opening two desktop instances against the same worker database. A failure attempts to restore the prior app and shortcut; if recovery itself fails, the error identifies the retained backup path. Successful upgrades retain the previous app and shortcut for manual rollback. The current script targets `win-x64` and is not tested on Windows ARM. The package is unsigned.
    To exercise the native Windows command launcher with a disposable fake runner, install Python 3 and run `cargo build` followed by `python tests\windows_runner.py`. This checks prompt delivery and follow-ups without consuming agent credits; it does not replace a test with the installed Codex or Claude CLI.
-3. Open **Xenia Worker** from Start. Enter the enrolled node ID, display name, projects root such as `C:\Users\<user>\projects`, capacity, and one-time worker credential. The credential is saved in Windows Credential Manager. Settings, worker database, and `worker.log` are in `%LOCALAPPDATA%\XeniaWorker`.
-4. For a controller on another machine, enter its SSH destination and a free local port such as `18080`. The app forwards that port to the configured controller port on the SSH host, `8080` by default. Verify the host key and key-based SSH login separately before starting; the app will not display interactive SSH prompts.
+3. Open **Xenia Worker** from Start. Enter a unique node ID, display name, projects root such as `C:\Users\<user>\projects`, capacity and controller HTTPS URL; then request access and approve it in Nodes. The credential is saved in Windows Credential Manager. Settings, worker database, and `worker.log` are in `%LOCALAPPDATA%\XeniaWorker`.
+4. For a controller on another machine, use the HTTPS URL. No SSH server, SSH keys, Windows inbound port or Mac Remote Login is needed. Existing manual worker credentials remain supported for local/headless diagnostics.
 5. Select **Start worker**, then check Nodes in the web app. To turn it off, select **Stop worker** and wait for it to finish active jobs. Closing the window while it is running requests the same graceful stop.
 
 To verify installation behavior without running a real agent, run
@@ -111,4 +126,4 @@ The Windows worker uses a Windows job object for process-tree cancellation. A sm
 
 If the app or computer is killed instead of stopped normally, an agent may outlive its supervisor on some platforms. The controller holds the node lease for up to 30 seconds after the last heartbeat; after takeover it marks active work uncertain and prevents the previous instance from claiming more work. Inspect and stop any surviving processes before resolving the job or starting follow-up work. Avoid running two worker instances with the same node ID or database: the lease protects claims, but it does not stop an already running agent. The database is bound to the configured node ID. To change identities, first stop the worker and ensure its pending reports have reached the controller, then retain the old database as a backup and configure a separate database for the new node. The desktop apps use a fixed database location, so move the old database and its SQLite WAL and shared-memory files together before starting the new identity; do not move them while the worker is running.
 
-Both apps place the worker credential in the child process environment while it runs. Protect the operating-system account and logs. SSH encrypts the cross-machine connection but local processes on either endpoint remain trusted. The controller is single-user and its browser token gives full operator access. See [installation and usage](installation.md) for the controller, HTTPS proxy example, detailed limitations, and backup guidance.
+Both apps place the worker credential in the child process environment while it runs. Protect the operating-system account and logs. HTTPS encrypts direct cross-machine connections; optional SSH encrypts legacy tunnels. Local processes on either endpoint remain trusted. The controller is single-user and its browser token gives full operator access. See [installation and usage](installation.md) for the controller, HTTPS proxy example, detailed limitations, and backup guidance.

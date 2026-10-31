@@ -7,10 +7,12 @@ import Foundation
         let environment = ProcessInfo.processInfo.environment
         UserDefaults.standard.register(defaults: [
             "node": "synthetic-node", "capacity": 1, "port": "8080",
+            "controllerURL": environment["TEST_HTTPS"] == "1" ? "https://controller.example:8443" : "",
+            "sshHost": environment["TEST_HTTPS"] == "1" ? "legacy-must-not-run" : "",
             "codexInteractive": environment["TEST_CODEX"] == "1",
             "claudeInteractive": environment["TEST_CLAUDE"] == "1"
         ])
-        let worker = WorkerManager()
+        let worker = WorkerManager(sshExecutable: URL(fileURLWithPath: environment["TEST_SSH"]!))
         worker.start(token: "synthetic-worker-credential")
         for _ in 0..<100 {
             if !worker.running { break }

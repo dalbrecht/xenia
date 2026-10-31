@@ -36,6 +36,10 @@ jobs:
         run: python3 tests/approval_api.py
       - name: History migration and pagination
         run: python tests/history_api.py
+      - name: Worker HTTPS verification and redirects
+        run: python tests/worker_transport.py
+      - name: Node request and approval enrollment
+        run: python tests/node_pairing.py
       - name: QR device pairing and revocation
         run: python tests/pairing_api.py
       - name: Experimental Codex approval transport
@@ -67,6 +71,9 @@ jobs:
       - name: Check macOS worker runner settings
         if: runner.os == 'macOS'
         run: python3 tests/macos_worker_settings.py
+      - name: Check macOS node pairing
+        if: runner.os == 'macOS'
+        run: python3 tests/macos_pairing.py
       - name: Check macOS tunnel recovery
         if: runner.os == 'macOS'
         run: python3 tests/macos_tunnel_retry.py

@@ -6,7 +6,7 @@ Xenia is a control plane for coordinating coding agents across machines and proj
 
 ## Getting started
 
-See the [installation and usage guide](docs/installation.md) for build instructions, QR phone pairing, configuration, secure tunneling for evaluation, and current limitations.
+See the [installation and usage guide](docs/installation.md) for build instructions, QR phone pairing, configuration, direct HTTPS worker connections, management-approved node pairing, and current limitations.
 
 Xenia is licensed under the [GNU Affero General Public License, version 3](LICENSE).
 

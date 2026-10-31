@@ -10,7 +10,7 @@ struct XeniaWorkerApp: App {
         MenuBarExtra("Xenia Worker", systemImage: worker.running ? "circle.fill" : "circle") {
             Text(worker.status)
             Button(worker.running ? "Stop worker" : "Start worker") { worker.running ? worker.stop() : worker.start() }
-                .disabled(worker.stopping || worker.accessingKeychain)
+                .disabled(worker.stopping || worker.pairing || worker.accessingKeychain)
             Divider()
             Button("Quit Xenia Worker") { worker.quit() }
         }
@@ -20,7 +20,7 @@ struct XeniaWorkerApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var worker: WorkerManager?
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let worker, worker.running else { return .terminateNow }
+        guard let worker, worker.running || worker.pairing else { return .terminateNow }
         worker.quit()
         return .terminateCancel
     }

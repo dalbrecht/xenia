@@ -14,6 +14,8 @@ python3 tests/e2e.py
 python3 tests/approval_api.py
 python3 tests/history_api.py
 python3 tests/pairing_api.py
+python3 tests/node_pairing.py
+python3 tests/worker_transport.py
 ```
 
 The integration tests start temporary controllers and synthetic runners. They do

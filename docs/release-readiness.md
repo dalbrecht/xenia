@@ -26,7 +26,7 @@ supported release behavior. No public release tag has been created.
   with the registered checkout eligible. Windows
   WPF cross-compilation has passed; native build, installation, credentials,
   tunnel recovery, and runtime checks are outstanding.
-- Browser regressions: a pinned development-only Playwright setup now defines eleven
+- Browser regressions: a pinned development-only Playwright setup now defines thirteen
   cases per engine for Chromium and WebKit. The original nine-case suites passed locally,
   including 320 px approvals, history paging, camera decoding, sign-out and a
   separate service-worker offline-shell check. The added independent job/worktree
@@ -34,9 +34,19 @@ supported release behavior. No public release tag has been created.
   Chromium and WebKit at 320 and 1440 px. GitHub Actions is configured to run
   the same matrix; a hosted CI run has not yet been observed. The installed trusted
   HTTPS endpoint also passed the WebKit PWA check with certificate validation.
-- Private connections: the worker uses loopback HTTP through SSH for a remote
-  controller. Local fake-process tests cover macOS tunnel retry and shutdown.
-  A real cross-machine SSH connection still needs verification.
+  Node enrollment approve/reject journeys pass at 320 px in both engines and
+  at 1440 px in WebKit, including dismissed approval and escaped device names.
+- Private connections: direct HTTPS and node-initiated approval replace SSH as the
+  normal remote-worker path. Protocol checks cover proof possession, approval,
+  restart, expiry, cancellation, revocation and identity scoping; native Windows
+  pairing, secret storage, connection and runtime checks remain outstanding.
+  A disposable worker completed request/approval, activated its credential,
+  appeared online, and stopped gracefully through the installed trusted HTTPS
+  endpoint. Its credential was revoked and temporary enrollment removed.
+  macOS subprocess checks cover code display, private credential receipt,
+  cancellation and direct-URL precedence without SSH; Keychain pairing remains
+  an operator check.
+  Optional SSH remains supported; fake-process tests cover macOS tunnel retry.
 - Interactive transports: opt-in in the desktop apps. Codex command approvals
   and Claude Bash approvals/questions have narrow real-provider evidence on
   macOS. Unsupported requests remain explicit or deny-only. Keep their limits

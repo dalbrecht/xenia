@@ -5,6 +5,7 @@ struct ContentView: View {
     @AppStorage("node") private var node = ""
     @AppStorage("name") private var name = ""
     @AppStorage("root") private var root = "~/projects"
+    @AppStorage("controllerURL") private var controllerURL = ""
     @AppStorage("port") private var port = "8080"
     @AppStorage("remotePort") private var remotePort = "8080"
     @AppStorage("sshHost") private var sshHost = ""
@@ -19,22 +20,29 @@ struct ContentView: View {
     @State private var savingToken = false
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack { Image(systemName: worker.running ? "circle.fill" : "circle").foregroundStyle(worker.running ? .green : .secondary); Text(worker.status); Spacer(); Button(worker.running ? "Stop worker" : "Start worker") { worker.running ? worker.stop() : saveAndStart() }.disabled(worker.stopping || worker.accessingKeychain || loadingToken || savingToken) }
+            HStack { Image(systemName: worker.running ? "circle.fill" : "circle").foregroundStyle(worker.running ? .green : .secondary); Text(worker.status); Spacer(); Button(worker.running ? "Stop worker" : "Start worker") { worker.running ? worker.stop() : saveAndStart() }.disabled(worker.stopping || worker.pairing || worker.accessingKeychain || loadingToken || savingToken) }
             Text("Stopping waits for active jobs to finish.").font(.caption).foregroundStyle(.secondary)
             Form {
                 TextField("Node ID", text: $node)
                 TextField("Node name", text: $name)
                 TextField("Projects directory", text: $root)
                 Stepper("Initial capacity: \(capacity)", value: $capacity, in: 1...64)
+                TextField("Controller HTTPS URL (blank uses local or legacy SSH)", text: $controllerURL)
+                if controllerURL.isEmpty {
                 TextField("Local controller port", text: $port)
                 TextField("SSH host (blank for local controller)", text: $sshHost)
                 if !sshHost.isEmpty { TextField("Controller port on SSH host", text: $remotePort) }
+                }
                 TextField("Additional runner PATH (optional)", text: $runnerPath)
                 Toggle("Interactive Codex approvals (experimental)", isOn: $codexInteractive)
                 Toggle("Interactive Claude questions and approvals (experimental)", isOn: $claudeInteractive)
                 SecureField("Worker credential", text: $token)
+            }.disabled(worker.running || worker.pairing || worker.accessingKeychain || loadingToken || savingToken)
+            Text("Credential is stored in macOS Keychain. Enter an HTTPS controller URL and request access below. SSH is optional for legacy connections.").font(.caption).foregroundStyle(.secondary)
+            Button(worker.pairing ? "Cancel request" : "Request access") {
+                if worker.pairing { worker.cancelPairing() } else { requestAccess() }
             }.disabled(worker.running || worker.accessingKeychain || loadingToken || savingToken)
-            Text("Credential is stored in macOS Keychain. For SSH, configure key-based authentication and trust the controller host in Terminal first.").font(.caption).foregroundStyle(.secondary)
+            if !worker.pairingStatus.isEmpty { Text(worker.pairingStatus).font(.callout).textSelection(.enabled) }
             if loadingToken || savingToken { Text("Waiting for Keychain…").font(.caption).foregroundStyle(.secondary) }
             if !message.isEmpty { Text(message).foregroundStyle(.red) }
         }.padding(24).task {
@@ -48,6 +56,22 @@ struct ContentView: View {
             }
             loadingToken = false
             worker.accessingKeychain = false
+        }
+    }
+    private func requestAccess() {
+        node = node.trimmingCharacters(in: .whitespacesAndNewlines)
+        controllerURL = controllerURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        message = ""
+        Task {
+            do {
+                let credential = try await worker.requestAccess(url: controllerURL.trimmingCharacters(in: .whitespacesAndNewlines), node: node.trimmingCharacters(in: .whitespacesAndNewlines), name: name)
+                token = credential
+                savingToken = true; worker.accessingKeychain = true
+                defer { savingToken = false; worker.accessingKeychain = false }
+                try await Task.detached { try SecretStore.save(credential) }.value
+                token = credential; savedToken = credential
+                worker.pairingStatus = "Approved. Credential saved in Keychain. Choose Start worker."
+            } catch { worker.pairingStatus = "Pairing ended: \(error.localizedDescription)" }
         }
     }
     private func saveAndStart() {

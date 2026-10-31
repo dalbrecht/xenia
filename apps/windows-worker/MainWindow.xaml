@@ -7,13 +7,18 @@
       <TextBlock Text="Node name"/><TextBox x:Name="NodeName" Margin="0,3,0,10"/>
       <TextBlock Text="Projects directory"/><TextBox x:Name="Root" Margin="0,3,0,10"/>
       <TextBlock Text="Initial capacity (1–64)"/><TextBox x:Name="Capacity" Text="1" Margin="0,3,0,10"/>
+      <TextBlock Text="Controller URL (HTTPS; blank uses local or legacy SSH)"/><TextBox x:Name="ControllerUrl" TextChanged="OnControllerUrlChanged" Margin="0,3,0,10"/>
+      <StackPanel x:Name="LegacyConnection">
       <TextBlock Text="Local controller port"/><TextBox x:Name="Port" Text="8080" Margin="0,3,0,10"/>
       <TextBlock Text="SSH host (blank for local controller)"/><TextBox x:Name="SshHost" Margin="0,3,0,10"/>
       <TextBlock Text="Controller port on SSH host"/><TextBox x:Name="RemotePort" Text="8080" Margin="0,3,0,10"/>
+      </StackPanel>
       <CheckBox x:Name="CodexInteractive" Content="Interactive Codex approvals (experimental)" Margin="0,4,0,10"/>
       <CheckBox x:Name="ClaudeInteractive" Content="Interactive Claude questions and approvals (experimental)" Margin="0,0,0,10"/>
       <TextBlock Text="Worker credential"/><PasswordBox x:Name="Token" Margin="0,3,0,10"/>
-      <TextBlock Text="The credential is stored in Windows Credential Manager. Set up key-based SSH and trust the controller host before starting." Foreground="Gray" TextWrapping="Wrap"/>
+      <TextBlock Text="The credential is stored in Windows Credential Manager. Enter an HTTPS controller URL and request access below. SSH is optional for legacy connections." Foreground="Gray" TextWrapping="Wrap"/>
     </StackPanel>
+    <Button x:Name="RequestAccess" Click="OnRequestAccess" Padding="14,8" Margin="0,12,0,0">Request access</Button>
+    <TextBlock x:Name="PairingStatus" TextWrapping="Wrap" Margin="0,10,0,0"/>
   </StackPanel></ScrollViewer>
 </Window>

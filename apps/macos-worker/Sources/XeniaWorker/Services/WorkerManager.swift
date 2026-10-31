@@ -17,6 +17,46 @@ import Foundation
     private var tunnelFailures = 0
     private var tunnelStartedAt: TimeInterval = 0
 
+    @Published var pairing = false
+    @Published var pairingStatus = ""
+    private var pairProcess: Process?
+    private var pairStop: URL?
+
+    static func validController(_ value: String) -> Bool {
+        guard let url = URLComponents(string: value), url.scheme == "https", url.host != nil,
+              url.user == nil, url.password == nil, url.query == nil, url.fragment == nil,
+              url.path.isEmpty || url.path == "/" else { return false }
+        return true
+    }
+    func cancelPairing() {
+        guard let pairStop else { return }
+        do { try Data().write(to: pairStop, options: .atomic); pairingStatus = "Cancelling request…" }
+        catch { pairingStatus = "Could not cancel request: \(error.localizedDescription)" }
+    }
+    func requestAccess(url: String, node: String, name: String) async throws -> String {
+        guard !running, !pairing, Self.validController(url), !node.isEmpty else { throw NSError(domain: "XeniaWorker", code: 1, userInfo: [NSLocalizedDescriptionKey: "Enter an HTTPS controller origin and node ID."]) }
+        guard let engine = Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("xenia-engine") else { throw NSError(domain: "XeniaWorker", code: 1) }
+        let process = Process(); process.executableURL = engine; process.arguments = ["pair"]
+        let output = Pipe(), errors = Pipe(); process.standardOutput = output; process.standardError = errors
+        let stop = FileManager.default.temporaryDirectory.appendingPathComponent("xenia-pair-stop-\(UUID().uuidString)")
+        var environment = ProcessInfo.processInfo.environment.filter { !$0.key.uppercased().hasPrefix("XENIA_") }
+        environment["XENIA_CONTROLLER"] = url; environment["XENIA_NODE_ID"] = node
+        environment["XENIA_NODE_NAME"] = name.isEmpty ? node : name; environment["XENIA_PAIR_STOP_FILE"] = stop.path
+        process.environment = environment
+        try process.run(); pairProcess = process; pairStop = stop; pairing = true; pairingStatus = "Requesting access…"
+        defer { if process.isRunning { process.terminate() }; pairing = false; pairProcess = nil; pairStop = nil; try? FileManager.default.removeItem(at: stop) }
+        var credential: String?
+        for try await line in output.fileHandleForReading.bytes.lines {
+            guard let data = line.data(using: .utf8), let value = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+            if value["state"] as? String == "completed" { credential = value["token"] as? String }
+            else if let code = value["code"] as? String { pairingStatus = "Compare code \(code) in the controller’s Nodes view and approve this worker. Expires in five minutes." }
+        }
+        let code = await Task.detached { process.waitUntilExit(); return process.terminationStatus }.value
+        if code == 0, let credential { return credential }
+        let error = String(data: errors.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "Request ended"
+        throw NSError(domain: "XeniaWorker", code: Int(code), userInfo: [NSLocalizedDescriptionKey: error.trimmingCharacters(in: .whitespacesAndNewlines)])
+    }
+
     init(sshExecutable: URL = URL(fileURLWithPath: "/usr/bin/ssh"), retryBaseSeconds: Double = 1) {
         self.sshExecutable = sshExecutable
         self.retryBaseSeconds = retryBaseSeconds
@@ -57,7 +97,7 @@ import Foundation
     }
 
     func start() {
-        guard !running, !accessingKeychain else { return }
+        guard !running, !pairing, !accessingKeychain else { return }
         accessingKeychain = true
         status = "Waiting for Keychain…"
         Task {
@@ -73,7 +113,7 @@ import Foundation
     }
 
     func start(token: String) {
-        guard !running else { return }
+        guard !running, !pairing else { return }
         let defaults = UserDefaults.standard
         let node = defaults.string(forKey: "node") ?? ""
         let root = defaults.string(forKey: "root") ?? "~/projects"
@@ -91,7 +131,9 @@ import Foundation
             let sshHost = defaults.string(forKey: "sshHost") ?? ""
             let port = defaults.string(forKey: "port") ?? "8080"
             guard let number = Int(port), (1...65535).contains(number) else { status = "Controller port must be 1–65535."; return }
-            if !sshHost.isEmpty {
+            let controllerURL = defaults.string(forKey: "controllerURL") ?? ""
+            guard controllerURL.isEmpty || Self.validController(controllerURL) else { status = "Enter an HTTPS controller origin without a path, query or credentials."; return }
+            if controllerURL.isEmpty && !sshHost.isEmpty {
                 let remotePort = defaults.string(forKey: "remotePort") ?? "8080"
                 guard let remoteNumber = Int(remotePort), (1...65535).contains(remoteNumber) else { status = "Remote controller port must be 1–65535."; return }
                 tunnelArguments = ["-N", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-L", "127.0.0.1:\(port):127.0.0.1:\(remotePort)", "--", sshHost]
@@ -111,7 +153,7 @@ import Foundation
             env["XENIA_NODE_NAME"] = name.isEmpty ? node : name
             env["XENIA_PROJECTS_ROOT"] = NSString(string: root).expandingTildeInPath
             env["XENIA_CAPACITY"] = String(max(1, defaults.integer(forKey: "capacity")))
-            env["XENIA_CONTROLLER"] = "http://127.0.0.1:\(port)"; env["XENIA_WORKER_TOKEN"] = token
+            env["XENIA_CONTROLLER"] = controllerURL.isEmpty ? "http://127.0.0.1:\(port)" : controllerURL; env["XENIA_WORKER_TOKEN"] = token
             env["XENIA_WORKER_DB"] = directory.appendingPathComponent("worker.db").path; env["XENIA_STOP_FILE"] = stop.path
             worker.environment = env; worker.standardOutput = handle; worker.standardError = handle
             worker.terminationHandler = { [weak self] process in Task { @MainActor in self?.finished(process.terminationStatus) } }
@@ -134,5 +176,5 @@ import Foundation
         try? logHandle?.close(); logHandle = nil; process = nil; running = false; stopping = false
         status = code == 0 ? "Stopped" : "Worker exited (\(code)); see worker.log in Application Support/XeniaWorker."
     }
-    func quit() { if running { stop(); status = "Stopping after active work finishes; quit once stopped." } else { NSApplication.shared.terminate(nil) } }
+    func quit() { if pairing { cancelPairing(); status = "Cancelling pairing; quit once it finishes." } else if running { stop(); status = "Stopping after active work finishes; quit once stopped." } else { NSApplication.shared.terminate(nil) } }
 }
