@@ -39,12 +39,13 @@ async function availablePort() {
     await api('approval/request', approval, credential);
     browser = await chromium.launch({headless:true,executablePath:process.env.XENIA_CHROMIUM_BIN || undefined});
     const desktop = process.env.XENIA_TEST_VIEWPORT === 'desktop';
-    const page = await browser.newPage({viewport:desktop ? {width:1440,height:900} : {width:390,height:844}}), errors=[];
+    const page = await browser.newPage({viewport:desktop ? {width:1440,height:900} : {width:Number(process.env.XENIA_TEST_WIDTH || 390),height:844}}), errors=[];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(base);
     await page.evaluate(value => sessionStorage.setItem('xenia-token', value), token);
     await page.reload();
     await page.getByText('awaiting approval', {exact:true}).waitFor();
+    if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw Error('Layout overflows the viewport');
     await page.getByRole('button', {name:/Review this task/}).click();
     await page.getByRole('region', {name:'Command approval'}).waitFor();
     if (!(await page.locator('.approval pre').textContent()).includes('<example>')) throw Error('Command missing');
@@ -81,6 +82,7 @@ async function availablePort() {
     await card.waitFor({timeout:12000});
     await card.getByLabel('Which format?').fill('Custom format');
     await card.getByLabel('Which sections?').fill('Intro, End');
+    if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw Error('Question form overflows the viewport');
     await page.waitForTimeout(2500);
     if (await card.getByLabel('Which format?').inputValue() !== 'Custom format') throw Error('Question draft lost during refresh');
     if (process.env.XENIA_QUESTION_SCREENSHOT) await page.screenshot({path:process.env.XENIA_QUESTION_SCREENSHOT,fullPage:true});
