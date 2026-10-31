@@ -185,7 +185,7 @@ fn native(
     let file = script(path, file)?;
     if windows {
         command(
-            "powershell.exe",
+            "powershell",
             &args(&[
                 "-NoProfile",
                 "-NonInteractive",
