@@ -11,6 +11,42 @@ These applications are early builds. The macOS app has been built and tested wit
 3. In the controller's web app, choose **Nodes → Enroll worker**, enter a unique ID, and copy its one-time credential. Share the credential securely with the worker owner. Do not use the controller token as a worker credential.
 4. For a remote worker, install and configure the OpenSSH client, verify the controller's SSH host key, and configure key-based, noninteractive login before using the desktop app. Test it in a terminal first. The app starts `ssh` with `BatchMode=yes`; it cannot answer a password, key-passphrase, or host-trust prompt. SSH access and port forwarding must be permitted on the controller. The SSH destination uses normal SSH client configuration, including a configured username and key.
 
+### Prepare a Mac controller for a remote worker
+
+The HTTPS address used by the phone and the SSH endpoint used by a worker are
+separate services. A working phone login does not prove SSH is available.
+On a Mac controller, enable **System Settings → General → Sharing → Remote Login**
+and allow access for the intended account. This enables remote SSH access; the
+operator should make that system-settings change directly. See
+[Apple's Remote Login guide](https://support.apple.com/en-au/guide/mac-help/mchlp1066/mac).
+Keep the connection on the intended private network or VPN.
+
+From Windows PowerShell, first check the chosen SSH endpoint, replacing this
+example hostname and port with your configuration:
+
+```powershell
+Test-NetConnection -ComputerName controller.example.ts.net -Port 22
+```
+
+If `TcpTestSucceeded` is false, resolve the listener, private-network connection,
+and firewall before starting the worker. Configure key-based SSH and verify the
+server's host-key fingerprint separately; the controller's public Ed25519 host-key
+fingerprint can be displayed on the Mac with
+`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`. Then verify that the Windows
+client can connect without an interactive prompt:
+
+```powershell
+ssh -o BatchMode=yes controller-alias exit
+```
+
+Here `controller-alias` is your SSH client configuration entry, including the Mac
+account, hostname, identity and a custom SSH port if applicable. Use that alias in
+**SSH host** in Xenia Worker. Set **Controller port on SSH host** to the actual
+loopback HTTP controller port, and **Local controller port** to a free port on
+Windows. These are HTTP tunnel ports, separate from the SSH server's port. A
+passphrase-protected key must already be unlocked in an SSH agent that the
+Windows app can use. SSH server policy must permit the required local forwarding.
+
 The app displays **Running** when the worker process is running; check the controller's Nodes page to confirm that the node is actually online. Startup and connection errors are written to the worker log. Release scripts remap common local build paths; the macOS script also strips debug metadata and checks its executables for the builder's home and source paths. Review artifacts before public distribution. The equivalent Windows path-remapping and packaging still need verification on Windows.
 
 If an SSH tunnel exits, the desktop app reports the disconnect and retries with increasing delays, including while the worker is stopping and delivering queued reports. SSH keepalives help detect a stalled connection. The worker continues running while disconnected and persists reports for delivery after reconnection; an offline worker cannot receive cancellation requests. Reconnection does not undo lease takeover or automatically resolve work marked unknown. The macOS retry behavior has been exercised with fake processes; Windows runtime verification remains outstanding.

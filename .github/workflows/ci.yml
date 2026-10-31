@@ -87,3 +87,27 @@ jobs:
       - name: Build Windows worker
         if: runner.os == 'Windows'
         run: ./scripts/build-windows-app.ps1
+
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    env:
+      XENIA_TEST_BROWSER: ${{ matrix.browser }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install pinned browser test dependencies
+        run: npm ci
+      - name: Install browser and system dependencies
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Build isolated test controller
+        run: cargo build --locked
+      - name: Test mobile and desktop PWA journeys
+        run: npm run test:browser

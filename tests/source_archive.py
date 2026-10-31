@@ -4,8 +4,10 @@ with tempfile.TemporaryDirectory(prefix='xenia-archive-test-') as tmp:
     root=pathlib.Path(tmp)
     for directory in ('.github','src','web','apps','docs','scripts','tests','script'):
         (root/directory).mkdir()
-    for name in ('Cargo.toml','Cargo.lock','LICENSE','README.md','.gitignore'):
+    for name in ('Cargo.toml','Cargo.lock','package.json','package-lock.json','LICENSE','README.md','.gitignore'):
         (root/name).write_text('synthetic fixture')
+    (root/'node_modules').mkdir()
+    (root/'node_modules/local-only').write_text('synthetic dependency cache')
     (root/'web/._artifact').write_bytes(b'synthetic resource-fork metadata')
     if hasattr(os, 'setxattr'):
         try:
@@ -18,6 +20,8 @@ with tempfile.TemporaryDirectory(prefix='xenia-archive-test-') as tmp:
             (root/'assets').mkdir(); (root/'assets/xenia.ico').write_bytes(b'synthetic icon')
         subprocess.run(['scripts/make-source-archive.sh'],cwd=root,check=True,stdout=subprocess.DEVNULL)
         with tarfile.open(root/'dist/xenia-source.tar.gz') as archive:
+            assert {'package.json','package-lock.json'}.issubset(archive.getnames())
+            assert not any(name.startswith('node_modules') for name in archive.getnames())
             assert not any(pathlib.PurePosixPath(name).name.startswith('._') for name in archive.getnames())
             for member in archive.getmembers():
                 assert member.uid == member.gid == 0

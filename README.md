@@ -11,3 +11,6 @@ See the [installation and usage guide](docs/installation.md) for build instructi
 Xenia is licensed under the [GNU Affero General Public License, version 3](LICENSE).
 
 See the [first release readiness assessment](docs/release-readiness.md) for acceptance evidence and remaining verification.
+
+Contributor checks, including the Chromium/WebKit mobile browser matrix, are in
+the [development verification guide](docs/verification.md).

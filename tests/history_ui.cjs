@@ -1,5 +1,6 @@
+// Fault-injection tests block service workers; offline_pwa.cjs covers real caching.
 // Long-history navigation regression; isolated controller, no provider usage.
-const {chromium}=require('playwright'),{spawn,execFileSync}=require('node:child_process');
+const browserType=require('playwright')[process.env.XENIA_TEST_BROWSER || 'chromium'],{spawn,execFileSync}=require('node:child_process');
 const fs=require('node:fs'),net=require('node:net'),os=require('node:os'),path=require('node:path');
 (async()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'xenia-history-ui-')),db=path.join(root,'db');
@@ -19,7 +20,7 @@ with sqlite3.connect(sys.argv[1]) as c:
   c.execute("INSERT INTO jobs(id,project_id,prompt,runner,node_id,state,created,parent_id,session_id,worktree,branch) VALUES(?,'p',?,'codex','worker','succeeded',0,?,'session','/tmp/synthetic-worktree','xenia/test')",(f'turn-{n}',('Long conversation' if n==0 else f'Turn {n}')+('x'*200)+f' END-TURN-{n}',None if n==0 else f'turn-{n-1}'))
   c.execute("INSERT INTO job_output_chunks(job_id,body) VALUES(?,?)",(f'turn-{n}',f'Output {n}\\n'))
 `,db]);await start();
-  browser=await chromium.launch({headless:true});const page=await browser.newPage({viewport:{width:Number(process.env.XENIA_TEST_WIDTH||390),height:844}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  browser=await browserType.launch({headless:true});const page=await browser.newPage({serviceWorkers:'block',viewport:{width:Number(process.env.XENIA_TEST_WIDTH||390),height:844}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base);await page.getByLabel('Controller token').fill(token);await page.getByRole('button',{name:'Connect',exact:true}).click();
   await page.getByText('41 total',{exact:true}).waitFor();if(await page.locator('[data-job]').count()!==25)throw Error('Unbounded conversation list');
   await page.locator('[data-job="turn-0"]').click();await page.locator('.message pre').filter({hasText:'Output 11'}).waitFor();

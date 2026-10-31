@@ -2,7 +2,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 mkdir -p dist
-set -- Cargo.toml Cargo.lock LICENSE README.md .gitignore .github src web apps docs scripts tests script
+set -- Cargo.toml Cargo.lock package.json package-lock.json LICENSE README.md .gitignore .github src web apps docs scripts tests script
 if [ -d assets ]; then set -- "$@" assets; fi
 # BSD tar and GNU tar spell ownership overrides differently. Do not publish
 # builder account names, ACLs, resource forks, or extended filesystem metadata.

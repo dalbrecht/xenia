@@ -1,5 +1,5 @@
 // Isolated browser proof for controller QR creation and mobile device login.
-const {chromium}=require('playwright');
+const browserType=require('playwright')[process.env.XENIA_TEST_BROWSER || 'chromium'];
 const {spawn}=require('node:child_process');
 const fs=require('node:fs'),net=require('node:net'),os=require('node:os'),path=require('node:path');
 (async()=>{
@@ -11,8 +11,8 @@ const fs=require('node:fs'),net=require('node:net'),os=require('node:os'),path=r
   let browser;
   try{
     for(let i=0;i<100;i++){try{if((await api('state')).ok)break}catch{}await new Promise(r=>setTimeout(r,50))}
-    browser=await chromium.launch({headless:true});const errors=[];
-    const admin=await browser.newPage({viewport:{width:1440,height:1000}});admin.on('pageerror',e=>errors.push(e.message));
+    browser=await browserType.launch({headless:true});const errors=[];
+    const admin=await browser.newPage({serviceWorkers:'block',viewport:{width:1440,height:1000}});admin.on('pageerror',e=>errors.push(e.message));
     await admin.goto(base);await admin.getByLabel('Controller token').fill(token);await admin.getByRole('button',{name:'Connect',exact:true}).click();
     await admin.getByRole('button',{name:'Pair phone',exact:true}).click();
     await admin.getByLabel('Controller HTTPS address').fill('https://controller.example:8443');
@@ -21,7 +21,7 @@ const fs=require('node:fs'),net=require('node:net'),os=require('node:os'),path=r
     if(await img.evaluate(el=>el.naturalWidth)<320)throw Error('QR did not render');
     if(await admin.getByLabel('Single-use pairing link').inputValue()!==code.url)throw Error('Wrong pairing link');
     if(process.env.XENIA_PAIR_SCREENSHOT)await admin.screenshot({path:process.env.XENIA_PAIR_SCREENSHOT});
-    const mobileContext=await browser.newContext({viewport:{width:320,height:740}}),phone=await mobileContext.newPage();phone.on('pageerror',e=>errors.push(e.message));
+    const mobileContext=await browser.newContext({serviceWorkers:'block',viewport:{width:320,height:740}}),phone=await mobileContext.newPage();phone.on('pageerror',e=>errors.push(e.message));
     // The controller enforces HTTPS origins in QR links. Local test transports the
     // same fragment over loopback; deployed trusted HTTPS gets separate coverage.
     await phone.goto(base+'/#'+code.url.split('#')[1]);await phone.getByText('Connected',{exact:true}).waitFor();

@@ -1,5 +1,6 @@
+// Fault-injection tests block service workers; offline_pwa.cjs covers real caching.
 // Browser integration test against an isolated controller. Requires Playwright.
-const {chromium} = require('playwright');
+const browserType = require('playwright')[process.env.XENIA_TEST_BROWSER || 'chromium'];
 const {spawn} = require('node:child_process');
 const fs = require('node:fs'), net = require('node:net'), os = require('node:os'), path = require('node:path');
 (async () => {
@@ -13,13 +14,16 @@ const fs = require('node:fs'), net = require('node:net'), os = require('node:os'
   try {
     let connected=false; for(let i=0;i<100;i++){try{await api('state');connected=true;break}catch{await new Promise(resolve=>setTimeout(resolve,50))}} if(!connected)throw Error('Controller did not start');
     await api('projects',{name:'example',repository:'repo'});
-    browser=await chromium.launch({headless:true,executablePath:process.env.XENIA_CHROMIUM_BIN||undefined});
-    const page=await browser.newPage({viewport:process.env.XENIA_TEST_VIEWPORT==='desktop'?{width:1440,height:900}:{width:390,height:844}}), errors=[];
+    browser=await browserType.launch({headless:true,executablePath:process.env.XENIA_TEST_BROWSER==='webkit'?undefined:process.env.XENIA_CHROMIUM_BIN||undefined});
+    const page=await browser.newPage({serviceWorkers:'block',viewport:process.env.XENIA_TEST_VIEWPORT==='desktop'?{width:1440,height:900}:{width:390,height:844}}), errors=[];
     page.on('pageerror',e=>errors.push(e.message));
     await page.goto(base); await page.getByLabel('Controller token').fill(token); await page.getByRole('button',{name:'Connect'}).click();
     await page.getByRole('button',{name:'Projects',exact:false}).click(); await page.getByText('example', {exact:true}).waitFor();
-    await page.route('**/api/workspace', route => route.abort(), {times:1});
-    await page.getByText(/Controller unavailable. Showing previously received data/).waitFor({timeout:12000});
+    let interceptedDisconnects=0;
+    const disconnect = route => {interceptedDisconnects++;return route.abort('internetdisconnected')};
+    await page.route('**/api/workspace', disconnect);
+    await page.getByText(/Controller unavailable. Showing previously received data/).waitFor({timeout:12000}).catch(async()=>{throw Error('Refresh state: '+JSON.stringify({interceptedDisconnects,...await page.evaluate(()=>({worker:!!navigator.serviceWorker?.controller,hidden:document.hidden,view,requests:workspaceRequest,status:document.querySelector('#connection').textContent}))}))});
+    await page.unroute('**/api/workspace', disconnect);
     await page.getByText('Connected',{exact:true}).waitFor({timeout:12000});
     // Delay an already-authorized refresh until after sign-out to verify stale responses are ignored.
     let release; const gate=new Promise(resolve=>{release=resolve}); let intercepted; const caught=new Promise(resolve=>{intercepted=resolve});

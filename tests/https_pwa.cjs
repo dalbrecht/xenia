@@ -1,11 +1,13 @@
-// Optional browser half of https_proxy.py. Requires Playwright and Chromium.
-const { chromium } = require('playwright');
+// PWA caching checks for a trusted HTTPS or loopback origin. Requires Playwright.
+const browserName = process.env.XENIA_TEST_BROWSER || 'chromium';
+const browserType = require('playwright')[browserName];
 
 (async () => {
   const url = process.env.XENIA_HTTPS_TEST_URL;
-  const executablePath = process.env.XENIA_CHROMIUM_BIN || undefined;
+  const executablePath = browserName === 'chromium' ? process.env.XENIA_CHROMIUM_BIN || undefined : undefined;
   const selfSigned = process.env.XENIA_HTTPS_TEST_SELF_SIGNED === '1';
-  const browser = await chromium.launch({headless:true, executablePath, args:selfSigned ? ['--host-resolver-rules=MAP xenia.example.internal 127.0.0.1', '--ignore-certificate-errors'] : []});
+  if(selfSigned && browserName !== 'chromium')throw Error('The disposable CA fixture requires Chromium hostname mapping; use offline_pwa.cjs or a trusted HTTPS URL for WebKit.');
+  const browser = await browserType.launch({headless:true, executablePath, args:selfSigned && browserName === 'chromium' ? ['--host-resolver-rules=MAP xenia.example.internal 127.0.0.1', '--ignore-certificate-errors'] : []});
   try {
     // The proxy test separately verifies the temporary CA with curl. Browser
     // certificate errors are ignored only in this disposable browser so the
@@ -28,13 +30,20 @@ const { chromium } = require('playwright');
     const details = await page.evaluate(async () => ({secure:isSecureContext, registration:!!await navigator.serviceWorker.getRegistration(), cache:(await caches.keys()).some(key => key.startsWith('xenia-shell-'))}));
     if (!details.secure || !details.registration || !details.cache) throw Error('HTTPS service worker or shell cache unavailable: ' + JSON.stringify(details));
     if (!await page.getByRole('heading', {name:'Conversations', exact:true}).count()) throw Error('Expected conversation screen');
-    const client = await context.newCDPSession(page);
-    const manifest = await client.send('Page.getAppManifest');
-    if (!manifest.url || manifest.errors.length) throw Error('Manifest errors: ' + JSON.stringify(manifest.errors));
+    const manifestPath = await page.locator('link[rel="manifest"]').getAttribute('href');
+    const manifestResponse = await context.request.get(new URL(manifestPath,url).href);
+    if(!manifestResponse.ok())throw Error('Manifest unavailable');
+    const manifestBody = await manifestResponse.json();
+    if(manifestBody.start_url!=='/' || manifestBody.display!=='standalone' || !manifestBody.icons?.some(icon=>icon.sizes==='512x512'))throw Error('Invalid install manifest');
+    if(browserName === 'chromium') {
+      const client = await context.newCDPSession(page);
+      const manifest = await client.send('Page.getAppManifest');
+      if (!manifest.url || manifest.errors.length) throw Error('Manifest errors: ' + JSON.stringify(manifest.errors));
+    }
     await context.setOffline(true);
     await page.reload({waitUntil:'domcontentloaded'});
     if (!await page.getByRole('heading', {name:'Conversations', exact:true}).count()) throw Error('Offline shell did not load');
     if (errors.length) throw Error('Browser errors: ' + errors.join('; '));
-    console.log('HTTPS secure context, PWA manifest, service worker and offline shell: PASS');
+    console.log(browserName + ': secure context, install manifest, service worker and offline shell: PASS');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

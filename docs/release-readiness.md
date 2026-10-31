@@ -6,7 +6,7 @@ supported release behavior. No public release tag has been created.
 
 | Acceptance criterion | Current evidence | Remaining verification |
 | --- | --- | --- |
-| Phone submission and progress | Browser interaction checks at a 390 px viewport; HTTPS proxy and service-worker tests; installed private HTTPS endpoint passed with certificate validation; operator confirmed the login screen opens in iPhone Safari without a certificate warning | Install on a real phone over the intended private network, submit work, follow output, reconnect, and follow up |
+| Phone submission and progress | Chromium and WebKit interaction checks at phone and desktop widths; trusted HTTPS and offline-shell checks pass in both engines; operator confirmed Safari QR login and a separate installed-app login screen | Complete pairing inside the installed phone app, submit work, follow output, reconnect, and follow up |
 | Isolated concurrent worktrees | Synthetic integration tests exercise parallel work and preserve the main checkout; installed macOS runner checks preserve checkout state | Repeat with native Windows runners and the intended multi-node deployment |
 | Capacity and explicit node assignment | Controller tests and local integration exercise capacity, offline assignment, and checkout eligibility | Exercise two physical nodes, including lowering capacity while jobs run |
 | Durable history and recovery | Controller-restart, lost-response, outbox replay, and instance-fencing tests; uncertain work requires explicit inspection | Native Windows crash and restart checks; document any platform-specific process survival |
@@ -20,6 +20,12 @@ supported release behavior. No public release tag has been created.
   signature verification, and installed start/stop checks have passed. Windows
   WPF cross-compilation has passed; native build, installation, credentials,
   tunnel recovery, and runtime checks are outstanding.
+- Browser regressions: a pinned development-only Playwright setup runs nine
+  cases per engine for Chromium and WebKit. Both complete suites passed locally,
+  including 320 px approvals, history paging, camera decoding, sign-out and a
+  separate service-worker offline-shell check. GitHub Actions is configured to run
+  the same matrix; a hosted CI run has not yet been observed. The installed trusted
+  HTTPS endpoint also passed the WebKit PWA check with certificate validation.
 - Private connections: the worker uses loopback HTTP through SSH for a remote
   controller. Local fake-process tests cover macOS tunnel retry and shutdown.
   A real cross-machine SSH connection still needs verification.

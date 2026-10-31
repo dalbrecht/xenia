@@ -1,0 +1,13 @@
+{
+  "name": "xenia-development",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "description": "Development-only browser verification for Xenia's embedded PWA",
+  "scripts": {
+    "test:browser": "node scripts/test-browser.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.64.1"
+  }
+}

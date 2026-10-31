@@ -1,5 +1,5 @@
 // Optional browser integration test. Requires Playwright and Chromium.
-const { chromium } = require('playwright');
+const browserType = require('playwright')[process.env.XENIA_TEST_BROWSER || 'chromium'];
 const { spawn } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const fs = require('node:fs');
@@ -37,9 +37,9 @@ async function availablePort() {
     await api('claim', {id:'test',instance_id:'instance',claim_id:randomUUID(),eligible:[project]}, credential);
     const approval = {node_id:'test',job_id:job,instance_id:'instance',request_id:randomUUID(),kind:'command',details:{command:'printf "<example>"',cwd:'/tmp/example',reason:'<img src=x onerror="window.injected=true">\u202e'}};
     await api('approval/request', approval, credential);
-    browser = await chromium.launch({headless:true,executablePath:process.env.XENIA_CHROMIUM_BIN || undefined});
+    browser = await browserType.launch({headless:true,executablePath:process.env.XENIA_TEST_BROWSER==='webkit'?undefined:process.env.XENIA_CHROMIUM_BIN || undefined});
     const desktop = process.env.XENIA_TEST_VIEWPORT === 'desktop';
-    const page = await browser.newPage({viewport:desktop ? {width:1440,height:900} : {width:Number(process.env.XENIA_TEST_WIDTH || 390),height:844}}), errors=[];
+    const page = await browser.newPage({serviceWorkers:'block',viewport:desktop ? {width:1440,height:900} : {width:Number(process.env.XENIA_TEST_WIDTH || 390),height:844}}), errors=[];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(base);
     await page.evaluate(value => sessionStorage.setItem('xenia-token', value), token);
