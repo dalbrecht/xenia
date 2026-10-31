@@ -11,6 +11,8 @@ with tempfile.TemporaryDirectory(prefix="xenia-package-test-") as tmp:
     for name in ("build-macos-app.sh", "build-release.sh", "check-macos-worker-stopped.sh"):
         shutil.copy2(pathlib.Path("scripts") / name, root / "scripts" / name)
     (root / "LICENSE").write_text("test license")
+    (root / "assets").mkdir()
+    (root / "assets/xenia.icns").write_bytes(b"synthetic icon")
     tools = root / "fake-bin"
     tools.mkdir()
     commands = {

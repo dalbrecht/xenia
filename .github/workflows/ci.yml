@@ -25,6 +25,9 @@ jobs:
       - name: Local integration test
         if: runner.os != 'Windows'
         run: python3 tests/e2e.py
+      - name: Source archive dependencies
+        if: runner.os != 'Windows'
+        run: python3 tests/source_archive.py
       - name: HTTP request limits
         if: runner.os != 'Windows'
         run: python3 tests/http_limits.py

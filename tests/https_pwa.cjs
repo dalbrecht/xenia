@@ -25,7 +25,7 @@ const { chromium } = require('playwright');
       });
       throw Error('Service worker did not take control: ' + JSON.stringify(diagnostics));
     }
-    const details = await page.evaluate(async () => ({secure:isSecureContext, registration:!!await navigator.serviceWorker.getRegistration(), cache:await caches.has('xenia-shell-v12')}));
+    const details = await page.evaluate(async () => ({secure:isSecureContext, registration:!!await navigator.serviceWorker.getRegistration(), cache:(await caches.keys()).some(key => key.startsWith('xenia-shell-'))}));
     if (!details.secure || !details.registration || !details.cache) throw Error('HTTPS service worker or shell cache unavailable: ' + JSON.stringify(details));
     if (!await page.getByRole('heading', {name:'Conversations', exact:true}).count()) throw Error('Expected conversation screen');
     const client = await context.newCDPSession(page);
