@@ -38,6 +38,10 @@ const fs=require('node:fs'),net=require('node:net'),os=require('node:os'),path=r
     await phone.waitForTimeout(100);
     if((await api('state',null,credential)).status!==401)throw Error('Sign-out did not revoke device');
     if(await phone.evaluate(()=>localStorage.getItem('xenia-device-token')))throw Error('Sign-out kept credential');
+    // Camera links can reuse an already-open Safari tab via a fragment change.
+    const reused=await(await api('pairing/create',{origin:'https://controller.example:8443'})).json();
+    await phone.goto(base+'/#'+reused.url.split('#')[1]);await phone.getByText('Connected',{exact:true}).waitFor();
+    await phone.getByRole('button',{name:'Sign out',exact:true}).click();await phone.getByRole('heading',{name:'Connect to Xenia'}).waitFor();
     // Installed PWAs with separate Safari storage can redeem a fresh link locally.
     const link=await(await api('pairing/create',{origin:'https://controller.example:8443'})).json();
     await phone.getByText('Use a pairing link instead').click();await phone.getByLabel('Pairing link',{exact:true}).fill(base+'/#'+link.url.split('#')[1]);await phone.getByRole('button',{name:'Pair this device'}).click();await phone.getByText('Connected',{exact:true}).waitFor();

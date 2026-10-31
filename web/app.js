@@ -3,8 +3,12 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
 let state = { projects: [], nodes: [], jobs: [], now: 0 };
 let view = 'conversations', selected = null, projectFilter = '', nodeFilter = '';
 let token = localStorage.getItem('xenia-device-token') || sessionStorage.getItem('xenia-token') || '';
-const pairingCode = new URLSearchParams(location.hash.slice(1)).get('pair');
-if (pairingCode) history.replaceState(null, '', location.pathname + location.search);
+function takePairingCode() {
+  const code = new URLSearchParams(location.hash.slice(1)).get('pair');
+  if (code) history.replaceState(null, '', location.pathname + location.search);
+  return code;
+}
+const pairingCode = takePairingCode();
 let authGeneration = 0;
 let outputCache = {};
 let approvalCache = {};
@@ -288,6 +292,7 @@ $('#pair-linkform').onsubmit = event => {
     redeemPairing(code); event.target.reset();
   } catch(error) {showError(error);}
 };
+window.addEventListener('hashchange', () => { const code = takePairingCode(); if (code) redeemPairing(code); });
 if (pairingCode) redeemPairing(pairingCode);
 else if (!token) { $('#connection').textContent = 'Signed out'; $('#auth').showModal(); } else refresh();
 function eligibilityFingerprint(data) {
