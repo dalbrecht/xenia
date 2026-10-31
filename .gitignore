@@ -1,0 +1,12 @@
+/target/
+*.db
+*.db-shm
+*.db-wal
+.env
+/dist/
+/apps/macos-worker/.build/
+/apps/windows-worker/bin/
+/apps/windows-worker/obj/
+
+__pycache__/
+*.pyc

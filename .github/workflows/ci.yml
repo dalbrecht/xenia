@@ -1,0 +1,77 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  engine:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select stable Rust
+        run: rustup default stable
+      - name: Check formatting
+        run: cargo fmt --check
+      - name: Test engine
+        run: cargo test --locked
+      - name: Build engine
+        run: cargo build --locked
+      - name: Runner launch gate
+        run: python tests/runner_host.py
+      - name: Local integration test
+        if: runner.os != 'Windows'
+        run: python3 tests/e2e.py
+      - name: HTTP request limits
+        if: runner.os != 'Windows'
+        run: python3 tests/http_limits.py
+      - name: Approval API scope and recovery
+        if: runner.os != 'Windows'
+        run: python3 tests/approval_api.py
+      - name: Experimental Codex approval transport
+        if: runner.os != 'Windows'
+        run: python3 tests/codex_approval_e2e.py
+      - name: Experimental Claude control transport
+        if: runner.os != 'Windows'
+        run: python3 tests/claude_control_e2e.py
+      - name: Unix runner supervision
+        if: runner.os != 'Windows'
+        run: python3 tests/supervision.py
+      - name: Native Windows runner launcher
+        if: runner.os == 'Windows'
+        run: python tests/windows_runner.py
+      - name: Check web JavaScript
+        run: node --check web/app.js
+      - name: Test runner event presentation
+        run: node --test tests/event-format.test.cjs
+      - name: Check service worker
+        run: node --check web/sw.js
+      - name: Check macOS app build guard
+        if: runner.os == 'macOS'
+        run: python3 tests/macos_build_guard.py
+      - name: Check macOS app packaging rollback
+        if: runner.os == 'macOS'
+        run: python3 tests/macos_package_staging.py
+      - name: Check macOS worker runner settings
+        if: runner.os == 'macOS'
+        run: python3 tests/macos_worker_settings.py
+      - name: Check macOS tunnel recovery
+        if: runner.os == 'macOS'
+        run: python3 tests/macos_tunnel_retry.py
+      - name: Build macOS worker
+        if: runner.os == 'macOS'
+        run: ./scripts/build-macos-app.sh
+      - name: Build privacy-remapped release engine
+        if: runner.os == 'Linux'
+        run: ./scripts/build-release.sh --locked
+      - name: Set up .NET
+        if: runner.os == 'Windows'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build Windows worker
+        if: runner.os == 'Windows'
+        run: ./scripts/build-windows-app.ps1

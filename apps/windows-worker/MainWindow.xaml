@@ -1,0 +1,19 @@
+<Window x:Class="XeniaWorker.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Xenia Worker" Height="610" Width="560" MinHeight="540" MinWidth="480" Closing="OnClosing">
+  <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="24">
+    <DockPanel Margin="0,0,0,15"><Button x:Name="StartStop" DockPanel.Dock="Right" Padding="14,8" Click="OnStartStop">Start worker</Button><TextBlock x:Name="Status" Text="Stopped" VerticalAlignment="Center" TextWrapping="Wrap"/></DockPanel>
+    <TextBlock Text="Stopping waits for active work to finish." Foreground="Gray" Margin="0,0,0,15"/>
+    <StackPanel x:Name="Settings">
+      <TextBlock Text="Node ID"/><TextBox x:Name="Node" Margin="0,3,0,10"/>
+      <TextBlock Text="Node name"/><TextBox x:Name="NodeName" Margin="0,3,0,10"/>
+      <TextBlock Text="Projects directory"/><TextBox x:Name="Root" Margin="0,3,0,10"/>
+      <TextBlock Text="Initial capacity (1–64)"/><TextBox x:Name="Capacity" Text="1" Margin="0,3,0,10"/>
+      <TextBlock Text="Local controller port"/><TextBox x:Name="Port" Text="8080" Margin="0,3,0,10"/>
+      <TextBlock Text="SSH host (blank for local controller)"/><TextBox x:Name="SshHost" Margin="0,3,0,10"/>
+      <TextBlock Text="Controller port on SSH host"/><TextBox x:Name="RemotePort" Text="8080" Margin="0,3,0,10"/>
+      <CheckBox x:Name="CodexInteractive" Content="Interactive Codex approvals (experimental)" Margin="0,4,0,10"/>
+      <CheckBox x:Name="ClaudeInteractive" Content="Interactive Claude questions and approvals (experimental)" Margin="0,0,0,10"/>
+      <TextBlock Text="Worker credential"/><PasswordBox x:Name="Token" Margin="0,3,0,10"/>
+      <TextBlock Text="The credential is stored in Windows Credential Manager. Set up key-based SSH and trust the controller host before starting." Foreground="Gray" TextWrapping="Wrap"/>
+    </StackPanel>
+  </StackPanel></ScrollViewer>
+</Window>
