@@ -6,7 +6,7 @@ supported release behavior. No public release tag has been created.
 
 | Acceptance criterion | Current evidence | Remaining verification |
 | --- | --- | --- |
-| Phone submission and progress | Chromium and WebKit interaction checks at phone and desktop widths; trusted HTTPS and offline-shell checks pass in both engines; operator confirmed Safari QR login and a separate installed-app login screen | Complete pairing inside the installed phone app, submit work, follow output, reconnect, and follow up |
+| Phone submission and progress | Chromium and WebKit interaction checks at phone and desktop widths; trusted HTTPS and offline-shell checks pass in both engines; operator confirmed QR login and reported a successful no-tool Codex task with the expected reply from the installed iPhone app | Observe live output, follow up, cancel work, and verify reconnect on the installed phone |
 | Isolated concurrent worktrees | Synthetic integration tests exercise parallel work and preserve the main checkout; installed macOS runner checks preserve checkout state | Repeat with native Windows runners and the intended multi-node deployment |
 | Capacity and explicit node assignment | Controller tests and local integration exercise capacity, offline assignment, and checkout eligibility | Exercise two physical nodes, including lowering capacity while jobs run |
 | Durable history and recovery | Controller-restart, lost-response, outbox replay, and instance-fencing tests; uncertain work requires explicit inspection | Native Windows crash and restart checks; document any platform-specific process survival |
