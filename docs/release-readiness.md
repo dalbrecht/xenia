@@ -10,9 +10,9 @@ supported release behavior. No public release tag has been created.
 | Isolated concurrent worktrees | Synthetic integration tests exercise parallel work and preserve the main checkout; installed macOS runner checks preserve checkout state | Repeat with native Windows runners and the intended multi-node deployment |
 | Capacity and explicit node assignment | Controller tests and local integration exercise capacity, offline assignment, and checkout eligibility | Exercise two physical nodes, including lowering capacity while jobs run |
 | Durable history and recovery | Controller-restart, lost-response, outbox replay, and instance-fencing tests; uncertain work requires explicit inspection; operator confirmed phone login/history survive closing and reopening | Native Windows crash and restart checks; document any platform-specific process survival |
-| Runner and checkout eligibility | Native macOS worker reports both runners and validates registered checkouts | Native Windows discovery, including installed CLI launchers and authentication |
-| Cancellation and explicit cleanup | Synthetic process-supervision tests, dirty-worktree refusal, retained branches; real macOS Claude waiting-run cancellation; operator confirmed running Codex work reaches Canceled and explicit cleanup reaches Succeeded from the installed iPhone app | Native Windows process-tree cancellation and cleanup |
-| Both runners complete work | Real macOS Codex and Claude initial conversations, follow-ups, and disposable edit checks; experimental approval transports tested separately | Native Windows real-provider tasks and supported-version compatibility |
+| Runner and checkout eligibility | Native macOS reports both runners; native Windows reports Codex, prepares a managed checkout and completes authenticated turns | Windows Claude discovery/authentication and broader installed-launcher coverage |
+| Cancellation and explicit cleanup | Synthetic process-supervision tests, dirty-worktree refusal, retained branches; real macOS Claude waiting-run cancellation; operator confirmed running Codex work reaches Canceled and explicit cleanup reaches Succeeded from the installed iPhone app; real Windows Codex running-command cancellation and successful/canceled worktree cleanup pass | Broader Windows descendant/escape cases and Claude cancellation |
+| Both runners complete work | Real macOS Codex and Claude initial conversations, follow-ups, and disposable edit checks; Windows Codex initial turn and contextual follow-up in the same session/worktree; experimental approval transports tested separately | Windows Claude Code real-provider tasks and broader supported-version compatibility |
 
 ## Project assignment and node policy additions
 
@@ -28,8 +28,13 @@ supported release behavior. No public release tag has been created.
 - Project selection, denied-node choices, state/log rendering and read-only node
   permissions pass Chromium at 320 px and WebKit at 1440 px.
 - macOS and Windows UI compilation passed. The macOS child-settings probe verifies
-  local permissions override inherited flags. Installed Windows permission and
-  real-provider project-assignment acceptance remain outstanding.
+  local permissions override inherited flags. An updated native Windows worker
+  reported its local permissions, cloned a pinned managed project, became
+  eligible, completed a real Codex initial turn and contextual follow-up in the
+  same session/worktree, and confirmed cancellation after a long-running
+  PowerShell command started. Explicit cleanup succeeded for both the successful
+  conversation and canceled job, preserving their independent outcome states.
+  Windows Claude Code and broader permission-policy acceptance remain outstanding.
 
 ## Operational gates
 
@@ -41,8 +46,9 @@ supported release behavior. No public release tag has been created.
   updated native app also loaded its existing Keychain credential, started the
   bundled worker, rejoined the controller, and reported both supported runners
   with the registered checkout eligible. Windows
-  WPF cross-compilation has passed; native build, installation, credentials,
-  tunnel recovery, and runtime checks are outstanding.
+  WPF cross-compilation has passed; native build and installation now support
+  a connected worker with local permission reporting and real Codex lifecycle evidence. Windows upgrade/rollback,
+  Claude runtime and optional legacy SSH recovery still need device verification.
 - Browser regressions: a pinned development-only Playwright setup now defines fifteen
   cases per engine for Chromium and WebKit. The original nine-case suites passed locally,
   including 320 px approvals, history paging, camera decoding, sign-out and a
