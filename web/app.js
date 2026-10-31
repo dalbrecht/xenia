@@ -169,8 +169,9 @@ function projectCard(p) {
 }
 function render() {
   $('#title').textContent = { conversations:'Conversations', queue:'Work queue', nodes:'Nodes', projects:'Projects' }[view];
-  document.querySelectorAll('nav button').forEach(button => button.classList.toggle('selected', button.dataset.view === view));
-  $('#new').textContent = view === 'projects' ? '+ Add project' : view === 'nodes' ? '+ Connect worker' : '+ New work';
+  document.querySelectorAll('nav button').forEach(button => (button.classList.toggle('selected', button.dataset.view === view),button.setAttribute('aria-current',button.dataset.view === view ? 'page' : 'false')));
+  const newLabel = view === 'projects' ? 'Add project' : view === 'nodes' ? 'Connect worker' : 'New work';
+  $('#new .toolbar-label').textContent = newLabel; $('#new').setAttribute('aria-label',newLabel); $('#new').title = newLabel;
   let html = '';
   if (view === 'conversations' || view === 'queue') {
     const rows = view === 'queue' ? state.jobs.map(job => ({ id: job.id, jobs: [job] })) : groups();

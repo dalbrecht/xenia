@@ -62,3 +62,39 @@
 #environment-dialog p, #assignment-dialog p { line-height: 1.5; margin: 8px 0; }
 @media(max-width:600px) { .project-card { padding: 14px; } .project-heading .assignment-actions { width: 100%; } .project-heading h3 { overflow-wrap: anywhere; } .assignment-actions button { min-height: 44px; } }
 .node-policy { overflow-wrap: anywhere; }
+
+/* App chrome: one stable toolbar and a thumb-friendly mobile tab bar. */
+:root { -webkit-font-smoothing: antialiased; }
+aside { position: sticky; top: 0; height: 100dvh; align-self: start; }
+nav button { display: flex; align-items: center; gap: 11px; }
+nav button span { margin-left: 0; }
+nav button svg { width: 19px; height: 19px; flex: none; }
+main { padding-top: 0; min-width: 0; }
+header.app-toolbar { position: sticky; top: 0; z-index: 3; flex-wrap: nowrap; gap: 12px; min-height: 78px; padding: 14px 0; background: #f7f7f6; }
+.toolbar-title { flex: 1; min-width: 0; }
+.app-toolbar h1 { font-size: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.header-actions { flex: none; flex-wrap: nowrap; gap: 6px; }
+.toolbar-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 40px; min-height: 40px; padding: 9px 12px; }
+.toolbar-button svg { width: 18px; height: 18px; flex: none; }
+.toolbar-button:focus-visible, nav button:focus-visible { outline: 2px solid #6468b0; outline-offset: 3px; }
+.toolbar-button:active { transform: scale(.96); }
+#connection { margin-top: 12px; font-size: 12px; }
+@media (max-width: 1000px) { .toolbar-button .toolbar-label { display: none; } .toolbar-button { padding: 9px; } }
+@media (max-width: 700px) {
+  aside { position: fixed; top: auto; bottom: 0; left: 0; right: 0; height: auto; width: 100%; z-index: 5; padding: 7px 10px calc(7px + env(safe-area-inset-bottom)); background: #fff; border-top: 1px solid #dedee5; }
+  .brand { display: none; }
+  nav { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 3px; overflow: visible; }
+  nav button { flex-direction: column; justify-content: center; gap: 5px; min-height: 52px; padding: 6px 2px; border-radius: 9px; font-size: 10px; color: #6e7081; }
+  nav button span { margin: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  nav button.selected { background: #ededf6; color: #414479; }
+  nav button svg { width: 20px; height: 20px; }
+  main { padding: 0 18px calc(100px + env(safe-area-inset-bottom)); }
+  header.app-toolbar { min-height: 68px; padding: 12px 0; gap: 8px; }
+  .app-toolbar h1 { font-size: 20px; }
+  .header-actions { gap: 3px; }
+  .toolbar-button { min-width: 44px; width: 44px; min-height: 44px; padding: 10px; border-radius: 10px; }
+  .toolbar-button svg { width: 19px; height: 19px; }
+  .section-heading { margin-top: 22px; }
+}
+@media (prefers-reduced-motion: reduce) { .toolbar-button:active { transform: none; } }
+.primary:disabled,.secondary:disabled { opacity: .5; cursor: not-allowed; }

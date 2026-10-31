@@ -13,6 +13,7 @@ function stop(child){
 }
 for(const [signal,code] of [['SIGINT',130],['SIGTERM',143]])process.once(signal,()=>{stop(active);process.exit(code)});
 const cases=[
+ ['toolbar_ui.cjs',{}],
  ['project_environments_ui.cjs',{XENIA_TEST_WIDTH:'320'}],
  ['project_environments_ui.cjs',{XENIA_TEST_WIDTH:'1440'}],
  ['node_pairing_ui.cjs',{XENIA_TEST_WIDTH:'320'}],

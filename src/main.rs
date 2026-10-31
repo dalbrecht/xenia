@@ -1167,6 +1167,11 @@ async fn handle_request(
     let path = req.uri().path().to_string();
     if !path.starts_with("/api/") {
         let result = match path.as_str() {
+            "/favicon.ico" => response(
+                200,
+                Bytes::from_static(include_bytes!("../web/favicon.ico")),
+                "image/x-icon",
+            ),
             "/icon-192.png" => response(
                 200,
                 Bytes::from_static(include_bytes!("../web/icon-192.png")),
