@@ -12,8 +12,21 @@ for(let i=0;i<100;i++){try{if((await api('state')).ok)break}catch{}await new Pro
 const created=await(await api('pairing/create',{origin})).json();
 browser=await browserType.launch({headless:true});const context=await browser.newContext({serviceWorkers:'block',viewport:{width:390,height:844}});
 await context.route(origin+'/**',async route=>{const response=await route.fetch({url:base+new URL(route.request().url()).pathname});await route.fulfill({response})});
-await context.addInitScript(({svg})=>{
+await context.addInitScript(({svg,syntheticVideo})=>{
  window.testCameraMode='denied';window.testStreams=[];
+ // Linux WebKit's headless media pipeline can leave canvas-stream play pending.
+ // Keep real MediaStreams/tracks and the real QR decoder, but supply deterministic
+ // video frames in that fixture. Native playback still requires device validation.
+ if(syntheticVideo){
+  const originalPlay=HTMLMediaElement.prototype.play,draw=CanvasRenderingContext2D.prototype.drawImage;
+  HTMLMediaElement.prototype.play=function(){
+   if(this.id!=='scan-video')return originalPlay.call(this);
+   Object.defineProperties(this,{readyState:{configurable:true,get:()=>2},videoWidth:{configurable:true,get:()=>640},videoHeight:{configurable:true,get:()=>480}});
+   return Promise.resolve();
+  };
+  CanvasRenderingContext2D.prototype.drawImage=function(source,...args){return draw.call(this,source instanceof HTMLVideoElement && source.id==='scan-video'?window.testCanvas:source,...args)};
+ }
+
  Object.defineProperty(navigator,'mediaDevices',{value:{getUserMedia:async()=>{
   window.testCameraFixtureError=null; try {
   if(window.testCameraMode==='denied')throw Error('test denied');
@@ -28,7 +41,7 @@ await context.addInitScript(({svg})=>{
   return stream;
   } catch(error) {window.testCameraFixtureError=error.message;throw error;}
  }}});
-},{svg:created.svg});
+},{svg:created.svg,syntheticVideo:process.env.XENIA_TEST_SYNTHETIC_VIDEO==='1' || process.platform==='linux' && process.env.XENIA_TEST_BROWSER==='webkit'});
 const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
 await page.goto(origin);await page.getByRole('button',{name:'Scan QR code',exact:true}).click();await page.getByRole('alert').filter({hasText:'Camera unavailable'}).waitFor();
 await page.evaluate(()=>window.testCameraMode='late');await page.getByRole('button',{name:'Scan QR code',exact:true}).click();await page.waitForFunction(()=>!!window.testCameraRelease,{},{timeout:3000}).catch(async()=>{throw Error('Late camera fixture: '+JSON.stringify(await page.evaluate(()=>({mode:window.testCameraMode,error:window.testCameraFixtureError,status:document.querySelector('#scan-status').textContent,previewHidden:document.querySelector('#scan-preview').hidden,mocked:navigator.mediaDevices.getUserMedia.toString().includes('testCameraMode')}))))});try {await page.getByRole('button',{name:'Stop camera'}).click({timeout:3000});}catch(error){throw Error('Synthetic camera startup: '+JSON.stringify(await page.evaluate(()=>({error:window.testCameraFixtureError,hidden:document.hidden,status:document.querySelector('#scan-status').textContent,previewHidden:document.querySelector('#scan-preview').hidden}))))}await page.evaluate(()=>window.testCameraRelease());await page.waitForFunction(()=>window.testStreams.every(s=>s.getTracks().every(t=>t.readyState==='ended')));

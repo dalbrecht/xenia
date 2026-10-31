@@ -1,3 +1,4 @@
+import contextlib
 """Node-owned credential approval, scoping, expiry, retry and bounded requests."""
 import hashlib, json, os, pathlib, secrets, socket, sqlite3, subprocess, tempfile, time, urllib.error, urllib.request
 with tempfile.TemporaryDirectory(prefix='xenia-node-pair-') as tmp:
@@ -15,7 +16,7 @@ with tempfile.TemporaryDirectory(prefix='xenia-node-pair-') as tmp:
                 return json.load(response)
         except urllib.error.HTTPError as e: assert e.code==status,(route,e.code,status)
     def sql(query,args=()):
-        with sqlite3.connect(db) as c: return c.execute(query,args).fetchall()
+        with contextlib.closing(sqlite3.connect(db)) as c, c: return c.execute(query,args).fetchall()
     def start():
         p=subprocess.Popen([binary,'controller'],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         for _ in range(100):

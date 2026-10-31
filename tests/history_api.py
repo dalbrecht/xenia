@@ -1,3 +1,4 @@
+import contextlib
 """Bounded history APIs, legacy migration and paging invariants; no real runners."""
 import json, os, pathlib, socket, sqlite3, subprocess, tempfile, time, urllib.error, urllib.request
 
@@ -27,7 +28,7 @@ with tempfile.TemporaryDirectory(prefix='xenia-history-') as tmp:
     p=start()
     try:
         p.terminate();p.wait(timeout=5)
-        with sqlite3.connect(db) as con:
+        with contextlib.closing(sqlite3.connect(db)) as con, con:
             # Reconstruct a database predating the history index, retaining output migration.
             con.executescript("DROP TRIGGER history_job_insert; DROP TABLE history_heads; DROP TABLE history_members; DELETE FROM schema_migrations WHERE name='history_pages_v1'; INSERT INTO projects VALUES('p','example','repo'); INSERT INTO projects VALUES('q','another','app');")
             for n in range(63):

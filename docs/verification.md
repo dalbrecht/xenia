@@ -71,3 +71,10 @@ or mobile process suspension. Complete those steps on a real device using the
 not replace the native Windows checks in the [desktop guide](desktop-workers.md).
 Keep screenshots and logs containing real hostnames or project data outside the
 public repository.
+
+The camera test uses real canvas streams and QR decoding. On headless Linux
+WebKit it supplies deterministic video frames because native canvas-stream
+playback can remain pending. Set `XENIA_TEST_SYNTHETIC_VIDEO=1` to exercise that
+fixture on another host. This does not validate an actual camera or replace
+installed-phone testing. Database fixtures explicitly close SQLite connections
+after committing so Windows can remove temporary database files.

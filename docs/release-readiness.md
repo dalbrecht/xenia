@@ -32,7 +32,9 @@ supported release behavior. No public release tag has been created.
   separate service-worker offline-shell check. The added independent job/worktree
   state checks cover cleanup success, failure, retry and shared turn worktrees in
   Chromium and WebKit at 320 and 1440 px. GitHub Actions is configured to run
-  the same matrix; a hosted CI run has not yet been observed. The installed trusted
+  the same matrix; hosted runs exposed Windows fixture cleanup and Linux
+  WebKit synthetic playback issues, now addressed in the fixtures. A fully
+  passing hosted matrix still needs confirmation. The installed trusted
   HTTPS endpoint also passed the WebKit PWA check with certificate validation.
   Node enrollment approve/reject journeys pass at 320 px in both engines and
   at 1440 px in WebKit, including dismissed approval and escaped device names.

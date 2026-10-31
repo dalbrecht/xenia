@@ -1,3 +1,4 @@
+import contextlib
 """One-use pairing, persistence, expiry, revocation and operator boundaries."""
 import hashlib
 import json
@@ -45,7 +46,7 @@ with tempfile.TemporaryDirectory(prefix='xenia-pairing-') as tmp:
         assert 110 < result['expires'] - time.time() <= 120
         return result['url'].split('#pair=')[1]
     def sql(query, args=()):
-        with sqlite3.connect(db) as connection:
+        with contextlib.closing(sqlite3.connect(db)) as connection, connection:
             return connection.execute(query, args).fetchall()
     p = start()
     try:
