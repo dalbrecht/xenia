@@ -17,7 +17,10 @@ supported release behavior. No public release tag has been created.
 ## Operational gates
 
 - Native apps: macOS release compilation, staging, rollback simulation, ad-hoc
-  signature verification, and installed start/stop checks have passed. Windows
+  signature verification, and installed start/stop checks have passed. A rebuilt
+  installed bundle's engine also passed the standard synthetic integration suite,
+  including concurrent worktrees, replay, cancellation and graceful shutdown; this
+  CLI evidence is separate from desktop credential/launch verification. Windows
   WPF cross-compilation has passed; native build, installation, credentials,
   tunnel recovery, and runtime checks are outstanding.
 - Browser regressions: a pinned development-only Playwright setup runs nine

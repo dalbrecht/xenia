@@ -39,7 +39,17 @@ try:
  expect_status(worker_token,'heartbeat',{'id':'test','name':'duplicate','capacity':1,'runners':['codex'],'instance_id':'duplicate'},400)
  project=req('projects',{'name':'example','repository':'repo'})['id'];lost_job=req('jobs',{'project_id':project,'runner':'codex','prompt':'claim recovery'})['id'];claim={'id':'test','instance_id':'before-start','eligible':[project],'claim_id':str(uuid.uuid4())}
  payload=json.dumps(claim).encode(); connection=socket.create_connection(('127.0.0.1',port),timeout=3)
- connection.sendall((f'POST /api/claim HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {worker_token}\r\nContent-Type: application/json\r\nContent-Length: {len(payload)}\r\nConnection: close\r\n\r\n').encode()+payload); connection.close()
+ connection.sendall((f'POST /api/claim HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {worker_token}\r\nContent-Type: application/json\r\nContent-Length: {len(payload)}\r\nConnection: close\r\n\r\n').encode()+payload)
+ # Headers are sent after the durable claim commits. Drop the connection before
+ # consuming its assignment body; an immediate close can discard the request
+ # before the server ever handles it, particularly with a fast release binary.
+ headers=b''
+ while not headers.endswith(b'\r\n\r\n'):
+  byte=connection.recv(1)
+  if not byte: raise AssertionError('claim response closed before headers')
+  headers+=byte
+ assert b' 200 ' in headers.split(b'\r\n',1)[0], headers
+ connection.close()
  until(lambda:next((j for j in req('state')['jobs'] if j['id']==lost_job and j['state']=='running'),None))
  procs[0].terminate();procs[0].wait(timeout=5)
  procs[0]=subprocess.Popen([binary,'controller'],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);until(lambda:req('state'))
