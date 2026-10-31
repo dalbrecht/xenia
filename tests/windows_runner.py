@@ -22,7 +22,7 @@ with tempfile.TemporaryDirectory(prefix="xenia-windows-") as tmp:
     bin_dir = root / "bin"
     bin_dir.mkdir()
     fake = bin_dir / "fake.py"
-    fake.write_text('''import hashlib, json, pathlib, subprocess, sys\nprompt = sys.stdin.buffer.read()\nassert not any("prompt-marker" in x for x in sys.argv)\nif prompt == b"spawn-child":\n    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(20)"])\n    pathlib.Path("child.pid").write_text(str(child.pid))\nprint(json.dumps({"type":"thread.started","thread_id":"synthetic-session"}), flush=True)\nprint(json.dumps({"type":"item.completed","item":{"type":"agent_message","text":hashlib.sha256(prompt).hexdigest()}}), flush=True)\n''', encoding="utf-8")
+    fake.write_text('''import hashlib, json, pathlib, subprocess, sys\nprompt = sys.stdin.buffer.read()\nassert not any("prompt-marker" in x for x in sys.argv)\nif prompt == b"wait-for-cancel":\n    print("waiting-for-cancel", flush=True)\n    import time\n    time.sleep(60)\nif prompt == b"spawn-child":\n    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(20)"])\n    pathlib.Path("child.pid").write_text(str(child.pid))\nprint(json.dumps({"type":"thread.started","thread_id":"synthetic-session"}), flush=True)\nprint(json.dumps({"type":"item.completed","item":{"type":"agent_message","text":hashlib.sha256(prompt).hexdigest()}}), flush=True)\n''', encoding="utf-8")
     (bin_dir / "codex.cmd").write_text(f'@"{sys.executable}" "{fake}" %*\r\n', encoding="utf-8")
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -86,7 +86,19 @@ with tempfile.TemporaryDirectory(prefix="xenia-windows-") as tmp:
                 kernel.CloseHandle(handle)
         else:
             assert ctypes.get_last_error() == 87, "could not inspect child process"  # ERROR_INVALID_PARAMETER: PID gone
-        print("Native Windows .cmd launcher, stdin, follow-up, and child cleanup: PASS")
+        request("cleanup", {"id": follow})
+        until(lambda: state(follow)["cleanup_state"] == "succeeded")
+        assert not pathlib.Path(second["worktree"]).exists()
+        assert state(follow)["state"] == "succeeded"
+        subprocess.run(["git", "-C", str(repo), "show-ref", "--verify", "refs/heads/" + first["branch"]], check=True, stdout=subprocess.DEVNULL)
+        cancel_job=request("jobs", {"project_id":project,"runner":"codex","prompt":"wait-for-cancel"})["id"]
+        until(lambda: "waiting-for-cancel" in request("outputs", {"ids":[cancel_job]})[cancel_job])
+        request("cancel", {"id":cancel_job})
+        cancelled=until(lambda: (j if (j := state(cancel_job))["state"] == "canceled" else None))
+        request("cleanup", {"id":cancel_job})
+        until(lambda: state(cancel_job)["cleanup_state"] == "succeeded")
+        assert state(cancel_job)["state"] == "canceled" and not pathlib.Path(cancelled["worktree"]).exists()
+        print("Native Windows .cmd launcher, stdin, follow-up, cancellation, worktree cleanup and child cleanup: PASS")
     finally:
         for process in reversed(processes):
             process.terminate()

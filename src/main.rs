@@ -1375,6 +1375,19 @@ fn runner_host() -> Result<i32, String> {
     Ok(status.code().unwrap_or(1))
 }
 
+// Retain canonical paths for containment checks, but use compatible Windows
+// spellings at tool boundaries. Git for Windows rejects many verbatim paths.
+fn external_path(path: &Path) -> &Path {
+    #[cfg(windows)]
+    {
+        dunce::simplified(path)
+    }
+    #[cfg(not(windows))]
+    {
+        path
+    }
+}
+
 fn repository_is_eligible(root: &Path, project: &str, repository: &str) -> bool {
     if !component(project) || !component(repository) {
         return false;
@@ -1391,7 +1404,7 @@ fn repository_is_eligible(root: &Path, project: &str, repository: &str) -> bool 
     let mut command = Command::new("git");
     command
         .arg("-C")
-        .arg(&checkout)
+        .arg(external_path(&checkout))
         .args(["rev-parse", "--show-toplevel", "HEAD^{commit}"])
         .stderr(Stdio::null());
     scrub_xenia_env(&mut command);
@@ -1720,7 +1733,7 @@ fn work(
         }
         let git = |args: &[&str]| -> Result<String, String> {
             let mut command = Command::new("git");
-            command.arg("-C").arg(&checkout).args(args);
+            command.arg("-C").arg(external_path(&checkout)).args(args);
             scrub_xenia_env(&mut command);
             let out = command.output().map_err(|e| e.to_string())?;
             if !out.status.success() {
@@ -1759,7 +1772,7 @@ fn work(
                 "add",
                 "-b",
                 &branch,
-                path.to_str().ok_or("Invalid path")?,
+                external_path(&path).to_str().ok_or("Invalid path")?,
                 &base,
             ])?;
             (path, branch)
@@ -2064,9 +2077,9 @@ fn cleanup(item: &Value, root: &Path) -> Result<(), String> {
     let mut command = Command::new("git");
     command
         .arg("-C")
-        .arg(checkout)
+        .arg(external_path(&checkout))
         .args(["worktree", "remove", "--"])
-        .arg(path);
+        .arg(external_path(&path));
     scrub_xenia_env(&mut command);
     let result = command.output().map_err(|e| e.to_string())?;
     if !result.status.success() {
@@ -2284,6 +2297,15 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    #[cfg(windows)]
+    fn external_paths_preserve_identity_without_verbatim_prefixes() {
+        let canonical = fs::canonicalize(env::temp_dir()).unwrap();
+        assert!(canonical.to_string_lossy().starts_with(r"\\?\"));
+        let compatible = external_path(&canonical);
+        assert!(!compatible.to_string_lossy().starts_with(r"\\?\"));
+        assert_eq!(fs::canonicalize(compatible).unwrap(), canonical);
+    }
     #[test]
     fn concurrent_worktree_parent_creation_is_idempotent() {
         let root = env::temp_dir().join(format!("xenia-parent-{}", id()));
