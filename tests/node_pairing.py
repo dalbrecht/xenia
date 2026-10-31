@@ -47,14 +47,21 @@ with tempfile.TemporaryDirectory(prefix='xenia-node-pair-') as tmp:
         assert poll(r,secret)['state']=='completed' and poll(r,secret)['state']=='completed'
         assert sql('SELECT digest FROM worker_credentials')[0][0]==hashlib.sha256(secret.encode()).hexdigest()
         assert secret.encode() not in db.read_bytes()
+        unseen=next(n for n in api('workspace')['nodes'] if n['id']=='test')
+        assert unseen['enrolled']==1 and unseen['connected_before']==0 and unseen['last_seen']==0
+        assert unseen['runners']=='[]' and unseen['occupied']==0
         decide(r,status=400)
         api('node-pairing/cancel',{'id':r['id']},secret,status=400)
         api('node-pairing/list',token=secret,status=401)
         api('workspace',token=secret,status=401)
         heartbeat={'id':'test','name':'Example','capacity':1,'runners':[],'instance_id':'instance'}
         api('heartbeat',heartbeat,secret)
+        seen=next(n for n in api('workspace')['nodes'] if n['id']=='test')
+        assert seen['connected_before']==1 and seen['enrolled']==1
         api('heartbeat',heartbeat|{'id':'other'},secret,status=403)
         api('workers/revoke',{'id':'test'});poll(r,secret,400);api('heartbeat',heartbeat,secret,status=401)
+        revoked=next(n for n in api('workspace')['nodes'] if n['id']=='test')
+        assert revoked['enrolled']==0 and revoked['connected_before']==1
         expired,proof=request('expired');decide(expired);sql('UPDATE node_enrollments SET expires=0 WHERE id=?',(expired['id'],));decide(expired,status=400);poll(expired,proof,400)
         denied,proof=request('denied');decide(denied,'rejected');assert poll(denied,proof)['state']=='rejected';decide(denied,status=400)
         cancelled,proof=request('cancelled');decide(cancelled);api('node-pairing/cancel',{'id':cancelled['id']},proof);decide(cancelled,status=400)

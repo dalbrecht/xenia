@@ -76,7 +76,7 @@ const jobStateAppearance = {
   queued:['clock','amber'],running:['spinner','blue'],succeeded:['check','green'],failed:['error','red'],
   canceled:['cancel','slate'],cancel_requested:['stop','amber'],interrupted:['warning','amber'],
   unknown:['question','amber'],awaiting_approval:['pause','purple'],needs_review:['warning','amber'],
-  online:['check','green'],offline:['cancel','slate']
+  online:['check','green'],offline:['cancel','slate'],never_connected:['clock','amber'],revoked:['stop','red']
 };
 function status(value) {
   const [icon,tone] = jobStateAppearance[value] || ['question','slate'];
@@ -166,7 +166,7 @@ function render() {
     else html += `<div class="work-list">${visible.map(row => workRow(row.id, row.jobs)).join('')}</div>`;
     html += pageControls('work', state, workspaceHistory);
   } else if (view === 'nodes') {
-    html = `<div class="section-heading"><div><h2>Worker nodes</h2><p>Machines available to run your agents.</p></div><span class="count">${state.nodes.length} total</span></div>` + (state.nodes.length ? `<div class="work-list">${state.nodes.map(n => `<div class="work-row node-row"><span class="job-icon node-icon">▣</span><span class="job-main"><strong>${escapeHtml(n.name)}</strong><small>${escapeHtml(JSON.parse(n.runners).join(', ') || 'No runners detected')} · ${n.occupied ?? 0} / ${n.capacity} occupied</small></span>${status(state.now - n.last_seen < 15 ? 'online' : 'offline')}<button data-capacity="${escapeHtml(n.id)}" class="secondary">Set capacity</button><button data-revoke="${escapeHtml(n.id)}" class="secondary">Revoke</button></div>`).join('')}</div>` : '<div class="empty"><h3>No nodes connected</h3><p>Start a worker to make it available here.</p></div>');
+    html = `<div class="section-heading"><div><h2>Worker nodes</h2><p>Machines available to run your agents.</p></div><span class="count">${state.nodes.length} total</span></div>` + (state.nodes.length ? `<div class="work-list">${state.nodes.map(n => `<div class="work-row node-row"><span class="job-icon node-icon">▣</span><span class="job-main"><strong>${escapeHtml(n.name)}</strong><small>${escapeHtml(JSON.parse(n.runners).join(', ') || 'No runners detected')} · ${n.occupied ?? 0} / ${n.capacity} occupied</small></span>${status(n.enrolled === 0 ? 'revoked' : n.connected_before === 0 ? 'never_connected' : state.now - n.last_seen < 15 ? 'online' : 'offline')}<button data-capacity="${escapeHtml(n.id)}" class="secondary" ${n.connected_before === 0 ? 'disabled title="Capacity can be changed after the worker first connects"' : ''}>Set capacity</button>${n.enrolled === 0 ? '' : `<button data-revoke="${escapeHtml(n.id)}" class="secondary">Revoke</button>`}</div>`).join('')}</div>` : '<div class="empty"><h3>No nodes connected</h3><p>Start a worker to make it available here.</p></div>');
     html = enrollmentRequests() + html;
   } else {
     html = `<div class="section-heading"><div><h2>Projects</h2><p>Repositories available for agent work.</p></div><span class="count">${state.projects.length} total</span></div>` + (state.projects.length ? `<div class="work-list">${state.projects.map(p => `<div class="work-row"><span class="job-icon">▤</span><span class="job-main"><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.repository)}</small></span></div>`).join('')}</div>` : '<div class="empty"><h3>No projects yet</h3><p>Add a project and repository to get started.</p><button class="secondary" id="empty-action">Add a project</button></div>');

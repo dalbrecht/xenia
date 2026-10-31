@@ -24,9 +24,18 @@ const browserType=require('playwright')[process.env.XENIA_TEST_BROWSER||'chromiu
   await page.getByRole('button',{name:'Approve worker',exact:true}).click();await page.getByText('Approved · waiting for worker',{exact:true}).waitFor();
   if((await api('node-pairing/poll',{id:request.id},secret)).state!=='completed')throw Error('Credential not activated');
   await page.locator('.enrollment-card').waitFor({state:'detached',timeout:12000});
+  const unseen=page.locator('.node-row').filter({hasText:'example-node'});
+  await unseen.getByText('never connected',{exact:true}).waitFor();
+  if(await unseen.getByRole('button',{name:'Set capacity'}).isEnabled())throw Error('Capacity offered before first connection');
+  await unseen.getByRole('button',{name:'Revoke',exact:true}).waitFor();
   await api('heartbeat',{id:'example-node',name:'Example node',capacity:1,runners:[],instance_id:'instance'},secret);await page.getByText('Example node',{exact:true}).waitFor({timeout:12000});
   const denied=await api('node-pairing/request',{node_id:'denied-node',name:'Rejected worker',platform:'macos',proof:createHash('sha256').update('other-'+secret).digest('hex')},'');
   await page.getByText(denied.code,{exact:true}).waitFor({timeout:12000});page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Reject',exact:true}).click();await page.locator('.enrollment-card').waitFor({state:'detached'});
+  await api('workers/enroll',{id:'unused-legacy'});
+  const legacy=page.locator('.node-row').filter({hasText:'unused-legacy'});
+  await legacy.getByText('never connected',{exact:true}).waitFor({timeout:12000});
+  page.once('dialog',d=>d.accept());await legacy.getByRole('button',{name:'Revoke',exact:true}).click();
+  await legacy.waitFor({state:'detached'});
   if(errors.length)throw Error(errors.join('\n'));
   console.log(`Node request, matching-code confirmation, dismiss, approve, activate, online and reject at ${page.viewportSize().width}px: PASS`);
  } finally {await browser?.close();if(controller.exitCode===null){const exited=new Promise(r=>controller.once('exit',r));controller.kill();await exited;}fs.rmSync(root,{recursive:true,force:true})}

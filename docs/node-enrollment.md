@@ -45,6 +45,12 @@ If OS secret-store saving fails, the app retains the credential in its in-memory
 field so starting the worker can retry saving; do not close it before retrying or
 revoke the enrollment before requesting a replacement.
 
+Workers with credentials appear in **Nodes** immediately after enrollment, even
+before their first heartbeat, with **Never connected** status. An unused manual
+enrollment can therefore be revoked there before requesting access again. If the
+desktop already has a saved credential, start the worker instead of enrolling
+again. Capacity controls become available after its first connection.
+
 ## Bounds and recovery
 
 SQLite stores only request/credential digests, comparison codes and bounded
