@@ -32,6 +32,9 @@ supported release behavior. No public release tag has been created.
   controller, worker and desktop RSS, plus a short concurrent real-runner sample.
   Representative coding sessions, longer histories, disk growth and Windows
   measurements remain outstanding; current samples do not establish budgets.
+  A 400-turn synthetic history now verifies paged lists and turns, full-history
+  filtering, and bounded output caching. The recorded paged controller sample
+  peaked at 11,232 KiB RSS; oversized compatibility snapshots are rejected.
 - Phone pairing: single-use two-minute QR links, separate 30-day device
   credentials, expiry, revocation, restart persistence and root-token rotation
   pass isolated API tests. Desktop and 320 px browser checks cover QR rendering,

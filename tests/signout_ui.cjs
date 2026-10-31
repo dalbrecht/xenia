@@ -18,12 +18,12 @@ const fs = require('node:fs'), net = require('node:net'), os = require('node:os'
     page.on('pageerror',e=>errors.push(e.message));
     await page.goto(base); await page.getByLabel('Controller token').fill(token); await page.getByRole('button',{name:'Connect'}).click();
     await page.getByRole('button',{name:'Projects',exact:false}).click(); await page.getByText('example', {exact:true}).waitFor();
-    await page.route('**/api/state', route => route.abort(), {times:1});
+    await page.route('**/api/workspace', route => route.abort(), {times:1});
     await page.getByText(/Controller unavailable. Showing previously received data/).waitFor({timeout:12000});
     await page.getByText('Connected',{exact:true}).waitFor({timeout:12000});
     // Delay an already-authorized refresh until after sign-out to verify stale responses are ignored.
     let release; const gate=new Promise(resolve=>{release=resolve}); let intercepted; const caught=new Promise(resolve=>{intercepted=resolve});
-    await page.route('**/api/state',async route=>{const response=await route.fetch();intercepted();await gate;await route.fulfill({response})},{times:1});
+    await page.route('**/api/workspace',async route=>{const response=await route.fetch();intercepted();await gate;await route.fulfill({response})},{times:1});
     await Promise.race([caught,new Promise((_,reject)=>setTimeout(()=>reject(Error('Refresh did not start')),10000))]);
     await page.getByRole('button',{name:'Sign out'}).click();
     if(!await page.getByRole('dialog').getByText('Connect to Xenia').isVisible())throw Error('Sign-out did not show login');

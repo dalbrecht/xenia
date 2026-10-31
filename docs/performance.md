@@ -45,3 +45,28 @@ To repeat the opt-in workload, build a release engine and run
 Both CLIs must be installed and authenticated; the check consumes model usage.
 Keep concurrency conservative until measurements on the target machines cover
 representative coding tasks. Windows and longer-running workloads still need data.
+
+## Synthetic long-history sample (2026-10-31)
+
+A disposable release controller on macOS ARM64 held 480 jobs: 80 independent
+roots and one 400-turn conversation. Each long-conversation turn had a 90,000-byte
+prompt and 64,000 bytes of output. The SQLite file was 63,021,056 bytes. No agent
+CLI or real project was used. Twenty request cycles were sampled using `ps` at
+approximately 50 ms intervals, with a short pause between cycles.
+
+The paged path fetched 25 list summaries, five full turns and the output page for
+each displayed turn. Its workspace response was 14,805 bytes, median request-cycle
+time was 14.6 ms, and peak sampled controller RSS was 11,232 KiB over 26 samples.
+Before adding the compatibility-snapshot guard, requesting all metadata returned
+36,316,783 bytes, took a median 124.4 ms per cycle, and reached a sampled peak of
+542,704 KiB over 61 samples. The compatibility comparison fetched metadata only;
+these timings are different request workloads rather than a general speed ratio.
+
+The current compatibility endpoint rejects that oversized history before building
+its response. The PWA uses the bounded APIs, and only keeps output for the displayed
+turn page. Total persisted history and disk usage still grow; no retention policy
+or disk quota is implied. RSS includes SQLite cache and allocator behavior, is not
+a unique-physical-memory measurement, and sampling can miss peaks. This short
+synthetic sample does not establish a long-running production or Windows budget.
+Repeat the current paged sample and guard check with
+`python3 scripts/measure-history-resources.py` after a release build.

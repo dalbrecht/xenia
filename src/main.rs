@@ -23,6 +23,7 @@ use uuid::Uuid;
 mod claude_worker;
 mod codex_protocol;
 mod codex_worker;
+mod history;
 mod pairing;
 
 const HTML: &str = include_str!("../web/index.html");
@@ -178,12 +179,21 @@ fn setup(path: &str) -> Result<Connection, String> {
         tx.execute("INSERT INTO job_output_chunks(job_id,body) SELECT id,output FROM jobs WHERE output<>''", []).map_err(|e| e.to_string())?;
     }
     tx.commit().map_err(|e| e.to_string())?;
+    history::setup(&db)?;
     Ok(db)
 }
 fn list(db: &Connection, sql: &str, names: &[&str]) -> Result<Value, String> {
+    list_params(db, sql, names, [])
+}
+fn list_params<P: rusqlite::Params>(
+    db: &Connection,
+    sql: &str,
+    names: &[&str],
+    values: P,
+) -> Result<Value, String> {
     let mut stmt = db.prepare(sql).map_err(|e| e.to_string())?;
     let rows = stmt
-        .query_map([], |row| {
+        .query_map(values, |row| {
             let mut o = serde_json::Map::new();
             for (i, n) in names.iter().enumerate() {
                 let v: rusqlite::types::Value = row.get(i)?;
@@ -280,6 +290,12 @@ fn approval_reviewable(kind: &str, details: &Value) -> bool {
 }
 fn api(db: &Db, method: &Method, path: &str, v: Value) -> Result<Value, String> {
     let db = db.lock().map_err(|e| e.to_string())?;
+    if let Some(result) = history::handle(&db, method, path, &v)? {
+        return Ok(result);
+    }
+    if method == Method::GET && path == "/api/state" {
+        history::check_legacy_snapshot(&db)?;
+    }
     match (method, path) {
         (&Method::GET, "/api/state") => Ok(
             json!({"projects":list(&db,"SELECT id,name,repository FROM projects ORDER BY name", &["id","name","repository"])? ,"nodes":list(&db,"SELECT id,name,capacity,last_seen,runners,eligible FROM nodes ORDER BY name", &["id","name","capacity","last_seen","runners","eligible"])? ,"jobs":list(&db,"SELECT j.id,j.project_id,p.name,p.repository,j.prompt,j.runner,j.node_id,j.state,j.worktree,j.branch,j.created,j.error,j.parent_id,j.session_id,(SELECT state FROM cleanups c WHERE c.worktree=j.worktree ORDER BY c.rowid DESC LIMIT 1),(SELECT error FROM cleanups c WHERE c.worktree=j.worktree ORDER BY c.rowid DESC LIMIT 1),j.permission_denied,EXISTS(SELECT 1 FROM approval_requests a JOIN nodes n ON n.id=a.node_id WHERE a.job_id=j.id AND a.decision IS NULL AND a.withdrawn=0 AND j.state='running' AND n.instance_id=a.instance_id) FROM jobs j JOIN projects p ON p.id=j.project_id ORDER BY j.created DESC,j.rowid DESC", &["id","project_id","project","repository","prompt","runner","node_id","state","worktree","branch","created","error","parent_id","session_id","cleanup_state","cleanup_error","permission_denied","approval_pending"])? ,"now":now()}),

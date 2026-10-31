@@ -10,6 +10,17 @@ function takePairingCode() {
 }
 const pairingCode = takePairingCode();
 let authGeneration = 0;
+let workspaceCursor = null, workspaceHistory = [], workspaceGeneration = 0, workspaceRequest = 0;
+let turnPage = null, turnCursor = null, turnHistory = [], detailGeneration = 0, turnRequest = 0, outputRequest = 0;
+function clearSelection() {
+  selected = null; turnPage = null; turnCursor = null; turnHistory = []; detailGeneration++;
+  outputCache = {}; approvalCache = {}; approvalGeneration++; followTarget = null; followDraft = '';
+}
+function resetWorkspacePage() { workspaceCursor = null; workspaceHistory = []; workspaceGeneration++; clearSelection(); }
+function pageControls(kind, page, history) {
+  return `<div class="actions history-pages"><button class="secondary" data-${kind}-page="older" ${page?.has_more ? '' : 'disabled'}>Earlier ${kind === 'turn' ? 'turns' : 'work'}</button>${history.length ? `<button class="secondary" data-${kind}-page="newer">Newer ${kind === 'turn' ? 'turns' : 'work'}</button><button class="secondary" data-${kind}-page="latest">Latest ${kind === 'turn' ? 'turns' : 'work'}</button>` : ''}</div>`;
+}
+
 let outputCache = {};
 let approvalCache = {};
 let approvalGeneration = 0;
@@ -47,19 +58,7 @@ async function api(path, body) {
 
 const status = value => `<span class="status ${escapeHtml(value)}"><i></i>${escapeHtml(value.replaceAll('_', ' '))}</span>`;
 const shorten = value => escapeHtml(value.length > 90 ? value.slice(0, 90) + '…' : value);
-function groups() {
-  const byId = new Map(state.jobs.map(job => [job.id, job]));
-  const grouped = new Map();
-  for (const job of state.jobs) {
-    let root = job, visited = new Set();
-    while (root.parent_id && byId.has(root.parent_id) && !visited.has(root.id)) {
-      visited.add(root.id); root = byId.get(root.parent_id);
-    }
-    if (!grouped.has(root.id)) grouped.set(root.id, []);
-    grouped.get(root.id).push(job);
-  }
-  return [...grouped].map(([id, jobs]) => ({ id, jobs: jobs.reverse() }));
-}
+function groups() { return state.jobs.map(job => ({id:job.conversation_id, jobs:[job]})); }
 function actions(job) {
   const terminal = ['succeeded', 'failed', 'canceled', 'interrupted'].includes(job.state);
   const cleanupBlocked = ['queued', 'running', 'unknown', 'succeeded'].includes(job.cleanup_state);
@@ -68,7 +67,7 @@ function actions(job) {
     ${job.state === 'unknown' ? `<button data-resolve="${escapeHtml(job.id)}" class="secondary">Resolve interrupted work</button>` : ''}
     ${['queued', 'running'].includes(job.state) ? `<button data-cancel="${escapeHtml(job.id)}" class="secondary">Cancel work</button>` : ''}
     ${job.worktree && terminal && !cleanupBlocked ? `<button data-cleanup="${escapeHtml(job.id)}" class="secondary">Remove worktree</button>` : ''}
-    ${job.session_id && terminal && !cleanupBlocked && !state.jobs.some(other => other.parent_id === job.id) ? `<button data-follow="${escapeHtml(job.id)}" class="primary">Follow up</button>` : ''}
+    ${job.session_id && terminal && !cleanupBlocked && !job.has_followup ? `<button data-follow="${escapeHtml(job.id)}" class="primary">Follow up</button>` : ''}
   </div>`;
 }
 function queueReason(job) {
@@ -79,12 +78,14 @@ function queueReason(job) {
   if (!eligible.length) return 'Waiting for a connected node with the runner and repository.';
   return 'Waiting for available node capacity.';
 }
-function details(jobs) {
-  const last = jobs[jobs.length - 1];
+function details(jobs, last) {
   return `<div class="detail"><div class="detail-meta"><span>Node: ${escapeHtml(state.nodes.find(n => n.id === last.node_id)?.name || 'Automatic')}</span><span>Branch: ${escapeHtml(last.branch || 'Pending')}</span></div>
   ${last.worktree ? `<p class="path">${escapeHtml(last.worktree)}</p>` : ''}
   ${queueReason(last) ? `<p class="path">${escapeHtml(queueReason(last))}</p>` : ''}
   ${last.cleanup_state ? `<p class="path">Cleanup: ${escapeHtml(last.cleanup_state)} ${escapeHtml(last.cleanup_error || '')}</p>` : ''}
+  ${view === 'conversations' ? pageControls('turn', turnPage, turnHistory) : ''}
+  ${turnHistory.length ? '<p class="path">Viewing earlier turns. Actions below apply to the latest turn.</p>' : ''}
+  ${!turnPage ? '<p class="path">Loading conversation…</p>' : ''}
   ${jobs.map(job => { const output = outputCache[job.id]; return `<div class="message"><strong>You</strong><p>${escapeHtml(job.prompt)}</p><strong>${escapeHtml(job.runner)}</strong>${job.error ? `<p class="error">${escapeHtml(job.error)}</p>` : ''}${output?.history?.length ? '<p class="path">Viewing earlier output; live updates are shown on the latest page.</p>' : ''}<pre>${escapeHtml(formatRunnerEvents(output?.text || '') || 'Waiting for agent output…')}</pre>${output?.has_more || output?.history?.length ? `<div class="actions"><button class="secondary" data-output-older="${escapeHtml(job.id)}" ${output.has_more ? '' : 'disabled'}>Earlier output</button>${output.history?.length ? `<button class="secondary" data-output-newer="${escapeHtml(job.id)}">Newer output</button><button class="secondary" data-output-latest="${escapeHtml(job.id)}">Latest output</button>` : ''}</div>` : ''}${(approvalCache[job.id] || []).map(approvalCard).join('')}</div>`; }).join('')}
   ${actions(last)}
   ${followTarget === last.id ? `<form data-follow-form="${escapeHtml(last.id)}" class="follow-form"><label>Follow-up message<textarea name="prompt" rows="4" required placeholder="Continue the conversation…">${escapeHtml(followDraft)}</textarea></label><div class="actions"><button type="button" data-close-follow class="secondary">Cancel</button><button class="primary">Send follow-up</button></div></form>` : ''}</div>`;
@@ -105,10 +106,10 @@ function approvalCard(request) {
 }
 function workRow(id, jobs) {
   const first = jobs[0], last = jobs[jobs.length - 1];
-  return `<button class="work-row ${selected === id ? 'active' : ''}" data-job="${escapeHtml(id)}"><span class="job-icon">${last.runner === 'codex' ? 'C' : '✳'}</span><span class="job-main"><strong>${shorten(first.prompt)}</strong><small>${escapeHtml(last.project)} / ${escapeHtml(last.repository)} · ${escapeHtml(last.runner)}${jobs.length > 1 ? ` · ${jobs.length} turns` : ''}</small></span>${status(last.approval_pending ? 'awaiting_approval' : last.state === 'succeeded' && last.permission_denied ? 'needs_review' : last.state)}<span class="arrow">›</span></button>${selected === id ? details(jobs) : ''}`;
+  return `<button class="work-row ${selected === id ? 'active' : ''}" data-job="${escapeHtml(id)}"><span class="job-icon">${last.runner === 'codex' ? 'C' : '✳'}</span><span class="job-main"><strong>${shorten(view === 'conversations' ? last.conversation_prompt : first.prompt)}</strong><small>${escapeHtml(last.project)} / ${escapeHtml(last.repository)} · ${escapeHtml(last.runner)}${last.pinned ? ' · Kept open' : ''}${view === 'conversations' && last.turn_count > 1 ? ` · ${last.turn_count} turns` : ''}</small></span>${status(last.approval_pending ? 'awaiting_approval' : last.state === 'succeeded' && last.permission_denied ? 'needs_review' : last.state)}<span class="arrow">›</span></button>${selected === id ? details(turnPage?.jobs || [], last) : ''}`;
 }
 function filters() {
-  return `<div class="filters"><label>Project <select id="project-filter"><option value="">All projects</option>${state.projects.map(p => `<option value="${escapeHtml(p.id)}" ${projectFilter === p.id ? 'selected' : ''}>${escapeHtml(p.name)} / ${escapeHtml(p.repository)}</option>`).join('')}</select></label><label>Node <select id="node-filter"><option value="">All nodes</option>${state.nodes.map(n => `<option value="${escapeHtml(n.id)}" ${nodeFilter === n.id ? 'selected' : ''}>${escapeHtml(n.name)}</option>`).join('')}</select></label></div>`;
+  return `<div class="filters"><label>Project <select id="project-filter" aria-label="Project filter"><option value="">All projects</option>${state.projects.map(p => `<option value="${escapeHtml(p.id)}" ${projectFilter === p.id ? 'selected' : ''}>${escapeHtml(p.name)} / ${escapeHtml(p.repository)}</option>`).join('')}</select></label><label>Node <select id="node-filter" aria-label="Node filter"><option value="">All nodes</option>${state.nodes.map(n => `<option value="${escapeHtml(n.id)}" ${nodeFilter === n.id ? 'selected' : ''}>${escapeHtml(n.name)}</option>`).join('')}</select></label></div>`;
 }
 function render() {
   $('#title').textContent = { conversations:'Conversations', queue:'Work queue', nodes:'Nodes', projects:'Projects' }[view];
@@ -118,18 +119,25 @@ function render() {
   if (view === 'conversations' || view === 'queue') {
     const rows = view === 'queue' ? state.jobs.map(job => ({ id: job.id, jobs: [job] })) : groups();
     const visible = rows.filter(row => (!projectFilter || row.jobs.some(j => j.project_id === projectFilter)) && (!nodeFilter || row.jobs.some(j => j.node_id === nodeFilter)));
-    html = `<div class="section-heading"><div><h2>${view === 'queue' ? 'All work' : 'Recent conversations'}</h2><p>${view === 'queue' ? 'Track work across your projects and nodes.' : 'Your agent work, in one place.'}</p></div><span class="count">${visible.length} total</span></div>${filters()}`;
-    if (!visible.length) html += `<div class="empty"><div class="empty-icon">✳</div><h3>${state.jobs.length ? 'No matching work' : 'No work yet'}</h3><p>${state.jobs.length ? 'Try a different filter.' : 'Add a project, then start a conversation with an agent.'}</p>${state.jobs.length ? '' : '<button class="secondary" id="empty-action">Add a project</button>'}</div>`;
+    html = `<div class="section-heading"><div><h2>${view === 'queue' ? 'All work' : 'Recent conversations'}</h2><p>${view === 'queue' ? 'Track work across your projects and nodes.' : 'Your agent work, in one place.'}</p></div><span class="count">${state.total ?? visible.length} total</span></div>${filters()}`;
+    if (!visible.length) html += `<div class="empty"><div class="empty-icon">✳</div><h3>${projectFilter || nodeFilter ? 'No matching work' : 'No work yet'}</h3><p>${projectFilter || nodeFilter ? 'Try a different filter.' : 'Add a project, then start a conversation with an agent.'}</p>${projectFilter || nodeFilter ? '' : '<button class="secondary" id="empty-action">Add a project</button>'}</div>`;
     else html += `<div class="work-list">${visible.map(row => workRow(row.id, row.jobs)).join('')}</div>`;
+    html += pageControls('work', state, workspaceHistory);
   } else if (view === 'nodes') {
-    html = `<div class="section-heading"><div><h2>Worker nodes</h2><p>Machines available to run your agents.</p></div><span class="count">${state.nodes.length} total</span></div>` + (state.nodes.length ? `<div class="work-list">${state.nodes.map(n => `<div class="work-row node-row"><span class="job-icon node-icon">▣</span><span class="job-main"><strong>${escapeHtml(n.name)}</strong><small>${escapeHtml(JSON.parse(n.runners).join(', ') || 'No runners detected')} · ${state.jobs.filter(j => j.node_id === n.id && ['running','cancel_requested','unknown'].includes(j.state)).length} / ${n.capacity} occupied</small></span>${status(state.now - n.last_seen < 15 ? 'online' : 'offline')}<button data-capacity="${escapeHtml(n.id)}" class="secondary">Set capacity</button><button data-revoke="${escapeHtml(n.id)}" class="secondary">Revoke</button></div>`).join('')}</div>` : '<div class="empty"><h3>No nodes connected</h3><p>Start a worker to make it available here.</p></div>');
+    html = `<div class="section-heading"><div><h2>Worker nodes</h2><p>Machines available to run your agents.</p></div><span class="count">${state.nodes.length} total</span></div>` + (state.nodes.length ? `<div class="work-list">${state.nodes.map(n => `<div class="work-row node-row"><span class="job-icon node-icon">▣</span><span class="job-main"><strong>${escapeHtml(n.name)}</strong><small>${escapeHtml(JSON.parse(n.runners).join(', ') || 'No runners detected')} · ${n.occupied ?? 0} / ${n.capacity} occupied</small></span>${status(state.now - n.last_seen < 15 ? 'online' : 'offline')}<button data-capacity="${escapeHtml(n.id)}" class="secondary">Set capacity</button><button data-revoke="${escapeHtml(n.id)}" class="secondary">Revoke</button></div>`).join('')}</div>` : '<div class="empty"><h3>No nodes connected</h3><p>Start a worker to make it available here.</p></div>');
   } else {
     html = `<div class="section-heading"><div><h2>Projects</h2><p>Repositories available for agent work.</p></div><span class="count">${state.projects.length} total</span></div>` + (state.projects.length ? `<div class="work-list">${state.projects.map(p => `<div class="work-row"><span class="job-icon">▤</span><span class="job-main"><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.repository)}</small></span></div>`).join('')}</div>` : '<div class="empty"><h3>No projects yet</h3><p>Add a project and repository to get started.</p><button class="secondary" id="empty-action">Add a project</button></div>');
   }
   $('#content').innerHTML = html;
-  document.querySelectorAll('[data-job]').forEach(b => b.onclick = () => { selected = selected === b.dataset.job ? null : b.dataset.job; outputCache = {}; approvalCache = {}; approvalGeneration++; render(); if (selected) { loadOutputs().catch(showError); loadApprovals().catch(showError); } });
-  if ($('#project-filter')) $('#project-filter').onchange = event => { projectFilter = event.target.value; render(); };
-  if ($('#node-filter')) $('#node-filter').onchange = event => { nodeFilter = event.target.value; render(); };
+  document.querySelectorAll('[data-job]').forEach(b => b.onclick = () => {
+    const id = selected === b.dataset.job ? null : b.dataset.job;
+    clearSelection(); selected = id; render();
+    if (selected) loadTurns().then(() => Promise.all([loadOutputs(),loadApprovals()])).catch(showError);
+  });
+  if ($('#project-filter')) $('#project-filter').onchange = event => { projectFilter = event.target.value; resetWorkspacePage(); refresh(); };
+  if ($('#node-filter')) $('#node-filter').onchange = event => { nodeFilter = event.target.value; resetWorkspacePage(); refresh(); };
+  document.querySelectorAll('[data-work-page]').forEach(b => b.onclick = () => changeWorkspacePage(b.dataset.workPage));
+  document.querySelectorAll('[data-turn-page]').forEach(b => b.onclick = () => changeTurnPage(b.dataset.turnPage).catch(showError));
   if ($('#empty-action')) $('#empty-action').onclick = () => $('#project-dialog').showModal();
   document.querySelectorAll('[data-capacity]').forEach(b => b.onclick = () => { const value = window.prompt('Maximum simultaneous jobs (1–64)'); if (value !== null) act('nodes/capacity', { id:b.dataset.capacity, capacity:Number(value) }); });
   document.querySelectorAll('[data-revoke]').forEach(b => b.onclick = () => { if (window.confirm('Revoke this worker credential? The worker will lose access, including the ability to report running work.')) act('workers/revoke', { id:b.dataset.revoke }); });
@@ -169,18 +177,41 @@ function render() {
   document.querySelectorAll('[data-close-follow]').forEach(b => b.onclick = () => { followTarget = null; followDraft = ''; render(); });
   document.querySelectorAll('[data-follow-form]').forEach(form => {
     form.querySelector('textarea').oninput = event => { followDraft = event.target.value; };
-    form.onsubmit = async event => { event.preventDefault(); const prompt = String(new FormData(form).get('prompt') || ''); if (!prompt.trim()) return; try { await api('followup', {id:form.dataset.followForm,prompt}); followTarget = null; followDraft = ''; await refresh(); } catch (error) { showError(error); } };
+    form.onsubmit = async event => { event.preventDefault(); const prompt = String(new FormData(form).get('prompt') || ''); if (!prompt.trim()) return; try { await api('followup', {id:form.dataset.followForm,prompt}); document.activeElement?.blur(); followTarget = null; followDraft = ''; workspaceCursor=null;workspaceHistory=[];workspaceGeneration++;turnCursor=null;turnHistory=[];detailGeneration++;await refresh(); } catch (error) { showError(error); } };
   });
 }
 function showError(error) { if (error.message === 'Session ended.') return; const target = document.querySelector('dialog[open] .dialog-error') || $('#notice'); target.textContent = error.message; }
+async function loadTurns() {
+  if (!selected) return;
+  const id = selected, mode = view, generation = detailGeneration, request = ++turnRequest;
+  const page = await api('conversation-page', {id, before:turnCursor, single:mode === 'queue'});
+  if (selected !== id || view !== mode || generation !== detailGeneration || request !== turnRequest) return;
+  const changed = JSON.stringify(turnPage) !== JSON.stringify(page); turnPage = page;
+  const visible = new Set(page.jobs.map(job => job.id));
+  for (const key of Object.keys(outputCache)) if(!visible.has(key)) delete outputCache[key];
+  if(changed) renderWhenNotEditing();
+}
+async function changeWorkspacePage(direction) {
+  if(direction === 'older') { if(!state.has_more) return; workspaceHistory.push(workspaceCursor); workspaceCursor = state.next_before; }
+  else if(direction === 'newer') { if(!workspaceHistory.length)return; workspaceCursor=workspaceHistory.pop(); }
+  else {workspaceHistory=[];workspaceCursor=null;}
+  workspaceGeneration++; clearSelection(); await refresh();
+}
+async function changeTurnPage(direction) {
+  if(direction === 'older') { if(!turnPage?.has_more)return;turnHistory.push(turnCursor);turnCursor=turnPage.next_before; }
+  else if(direction === 'newer') {if(!turnHistory.length)return;turnCursor=turnHistory.pop();}
+  else {turnHistory=[];turnCursor=null;}
+  detailGeneration++;turnPage=null;outputCache={};approvalCache={};approvalGeneration++;render();
+  await loadTurns(); await Promise.all([loadOutputs(),loadApprovals()]);
+}
 async function loadOutputs() {
-  const current = selected;
-  const jobs = view === 'queue' ? state.jobs.filter(job => job.id === current) : groups().find(group => group.id === current)?.jobs || [];
+  const current = selected, mode = view, generation = detailGeneration, request = ++outputRequest;
+  const jobs = turnPage?.jobs || [];
   let changed = false;
   for (const job of jobs) {
     if (outputCache[job.id]?.history?.length) continue;
     const page = await api('output-page', {id:job.id});
-    if (selected !== current) return;
+    if (selected !== current || view !== mode || generation !== detailGeneration || request !== outputRequest) return;
     if (outputCache[job.id]?.history?.length) continue;
     const next = {...page, history:[]};
     if (JSON.stringify(outputCache[job.id]) !== JSON.stringify(next)) { outputCache[job.id] = next; changed = true; }
@@ -189,7 +220,7 @@ async function loadOutputs() {
 }
 async function loadApprovals() {
   const current = selected, currentView = view, generation = ++approvalGeneration;
-  const jobs = view === 'queue' ? state.jobs.filter(job => job.id === current) : groups().find(group => group.id === current)?.jobs || [];
+  const jobs = turnPage?.jobs || [];
   const approvals = {};
   for (const job of jobs.filter(job => job.state === 'running')) approvals[job.id] = await api('approval/list', {id:job.id});
   if (selected !== current || view !== currentView || generation !== approvalGeneration) return;
@@ -209,21 +240,27 @@ async function changeOutputPage(id, direction) {
   render();
 }
 function fingerprint(data) {
-  return JSON.stringify({projects:data.projects,jobs:data.jobs,nodes:data.nodes.map(({last_seen,...node}) => ({...node,online:data.now-last_seen<15}))});
+  return JSON.stringify({projects:data.projects,jobs:data.jobs,total:data.total,has_more:data.has_more,nodes:data.nodes.map(({last_seen,...node}) => ({...node,online:data.now-last_seen<15}))});
 }
 async function refresh() {
+  const generation = workspaceGeneration, request = ++workspaceRequest;
   try {
-    const before = fingerprint(state); state = await api('state'); $('#notice').textContent = '';
+    const before = fingerprint(state);
+    const next = await api('workspace', {mode:view, before:workspaceCursor, project_id:projectFilter, node_id:nodeFilter, selected});
+    if(generation !== workspaceGeneration || request !== workspaceRequest) return;
+    if(next.pinned) next.jobs.push({...next.pinned, pinned:true});
+    state = next; $('#notice').textContent = '';
     $('#connection').textContent = 'Connected'; $('#connection').classList.remove('disconnected');
     if (!$('#content').innerHTML || before !== fingerprint(state)) renderWhenNotEditing();
-    if (selected) { await loadOutputs(); await loadApprovals(); }
+    if (selected) { await loadTurns(); await loadOutputs(); await loadApprovals(); }
   } catch (error) {
+    if(generation !== workspaceGeneration || request !== workspaceRequest)return;
     if (token && error.message !== 'Session ended.') { $('#connection').textContent = 'Controller unavailable. Showing previously received data; actions require a connection.'; $('#connection').classList.add('disconnected'); }
     showError(error);
   }
 }
 async function act(path, body) { try { await api(path, body); await refresh(); } catch (error) { showError(error); } }
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => { view = b.dataset.view; selected = null; outputCache = {}; approvalCache = {}; approvalGeneration++; followTarget = null; followDraft = ''; render(); });
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => { view = b.dataset.view; resetWorkspacePage(); state.jobs = []; render(); refresh(); });
 function updateNodeChoices() {
   const form = $('#jobform');
   const project = form.elements.project_id.value, runner = form.elements.runner.value;
@@ -257,13 +294,13 @@ $('#new').onclick = () => {
   $('#compose').showModal();
 };
 document.querySelectorAll('.close').forEach(b => b.onclick = () => { const dialog = b.closest('dialog'); dialog.close(); dialog.querySelectorAll('.dialog-error').forEach(e => e.textContent = ''); if (dialog.id === 'worker-dialog') $('#worker-token').value = ''; if (dialog.id === 'compose') render(); });
-$('#jobform').onsubmit = async event => { event.preventDefault(); if (event.target.elements.node_id.selectedOptions[0]?.disabled) { showError(Error('The selected node is no longer eligible. Choose another node or Automatic.')); return; } try { await api('jobs', Object.fromEntries(new FormData(event.target))); event.target.reset(); $('#compose').close(); view = 'queue'; await refresh(); } catch (error) { showError(error); } };
+$('#jobform').onsubmit = async event => { event.preventDefault(); if (event.target.elements.node_id.selectedOptions[0]?.disabled) { showError(Error('The selected node is no longer eligible. Choose another node or Automatic.')); return; } try { await api('jobs', Object.fromEntries(new FormData(event.target))); event.target.reset(); $('#compose').close(); view = 'queue'; resetWorkspacePage(); await refresh(); } catch (error) { showError(error); } };
 $('#projectform').onsubmit = async event => { event.preventDefault(); try { await api('projects', Object.fromEntries(new FormData(event.target))); event.target.reset(); $('#project-dialog').close(); await refresh(); } catch (error) { showError(error); } };
 $('#workerform').onsubmit = async event => { event.preventDefault(); try { const result = await api('workers/enroll', Object.fromEntries(new FormData(event.target))); $('#workerform').hidden = true; $('#worker-result').hidden = false; $('#worker-token').value = result.token; await refresh(); } catch (error) { showError(error); } };
 $('#sign-out').onclick = () => {
   if (localStorage.getItem('xenia-device-token')) fetch('/api/pairing/end', {method:'POST', headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}'}).catch(() => {});
   localStorage.removeItem('xenia-device-token');
-  authGeneration++; token = ''; sessionStorage.removeItem('xenia-token');
+  resetWorkspacePage(); authGeneration++; token = ''; sessionStorage.removeItem('xenia-token');
   state = { projects: [], nodes: [], jobs: [], now: 0 }; selected = null;
   outputCache = {}; approvalCache = {}; questionDrafts = {}; approvalGeneration++;
   followTarget = null; followDraft = ''; projectFilter = ''; nodeFilter = '';
@@ -305,7 +342,10 @@ function eligibilityFingerprint(data) {
 }
 async function refreshComposer() {
   try {
-    const before = eligibilityFingerprint(state); state = await api('state');
+    const before = eligibilityFingerprint(state), generation = workspaceGeneration;
+    const next = await api('workspace', {mode:'projects'});
+    if(generation !== workspaceGeneration)return;
+    state = {...state,projects:next.projects,nodes:next.nodes,now:next.now};
     $('#connection').textContent = 'Connected'; $('#connection').classList.remove('disconnected');
     if (before !== eligibilityFingerprint(state)) updateNodeChoices();
   } catch (error) { if (token && error.message !== 'Session ended.') { $('#connection').textContent = 'Controller unavailable. Showing previously received data; actions require a connection.'; $('#connection').classList.add('disconnected'); } showError(error); }

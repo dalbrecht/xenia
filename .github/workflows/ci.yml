@@ -34,6 +34,8 @@ jobs:
       - name: Approval API scope and recovery
         if: runner.os != 'Windows'
         run: python3 tests/approval_api.py
+      - name: History migration and pagination
+        run: python tests/history_api.py
       - name: QR device pairing and revocation
         run: python tests/pairing_api.py
       - name: Experimental Codex approval transport
