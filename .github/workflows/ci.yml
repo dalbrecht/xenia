@@ -52,6 +52,8 @@ jobs:
         run: node --check web/app.js
       - name: Test runner event presentation
         run: node --test tests/event-format.test.cjs
+      - name: Check QR scanner
+        run: node --check web/pair-scanner.js
       - name: Check service worker
         run: node --check web/sw.js
       - name: Check macOS app build guard

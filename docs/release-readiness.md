@@ -35,7 +35,11 @@ supported release behavior. No public release tag has been created.
   credentials, expiry, revocation, restart persistence and root-token rotation
   pass isolated API tests. Desktop and 320 px browser checks cover QR rendering,
   automatic login, persistence, sign-out and the installed-app link fallback.
-  Real iPhone scanning and Home Screen storage behavior still require confirmation.
+  The operator confirmed iPhone Camera pairing succeeds and that the installed
+  Home Screen app uses separate login storage. An in-app camera scanner now
+  covers this case; synthetic camera checks cover QR decoding, denied permission,
+  late-stream cleanup, stopping capture and persistent login. Actual in-app iPhone
+  camera scanning still requires confirmation.
 - Source hygiene: AGPL-3.0-only license and package metadata are present. The
   local baseline uses generic author metadata. Source scans and archive checks
   exclude known machine-specific names, credentials, databases, and build output;

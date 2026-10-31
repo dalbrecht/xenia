@@ -274,23 +274,28 @@ $('#sign-out').onclick = () => {
   $('#connection').textContent = 'Signed out'; $('#connection').classList.remove('disconnected');
   view = 'conversations'; render(); $('#auth').showModal();
 };
-$('#authform').onsubmit = event => { event.preventDefault(); authGeneration++; localStorage.removeItem('xenia-device-token'); token = new FormData(event.target).get('token'); sessionStorage.setItem('xenia-token', token); event.target.reset(); $('#auth').close(); refresh(); };
+$('#authform').onsubmit = event => { event.preventDefault(); stopPairScan(); authGeneration++; localStorage.removeItem('xenia-device-token'); token = new FormData(event.target).get('token'); sessionStorage.setItem('xenia-token', token); event.target.reset(); $('#auth').close(); refresh(); };
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 async function redeemPairing(code) {
   $('#connection').textContent = 'Pairing this device…';
   return api('pairing/redeem', {code}).then(result => {
-    authGeneration++; token = result.token; localStorage.setItem('xenia-device-token', token);
+    stopPairScan(); authGeneration++; token = result.token; localStorage.setItem('xenia-device-token', token);
     sessionStorage.removeItem('xenia-token'); if ($('#auth').open) $('#auth').close(); refresh();
   }).catch(error => { $('#auth').showModal(); showError(error); });
 }
+function redeemPairingLink(value) {
+  const link = new URL(value);
+  const code = new URLSearchParams(link.hash.slice(1)).get('pair');
+  if (link.origin !== location.origin || !/^[a-f0-9]{64}$/.test(code || '')) throw Error('Use a fresh pairing link for this controller.');
+  return redeemPairing(code);
+}
+$('#scan-pair').onclick = () => { $('#auth .dialog-error').textContent = ''; startPairScan(value => redeemPairingLink(value), showError); };
+$('#scan-stop').onclick = stopPairScan;
+$('#auth').addEventListener('close', stopPairScan);
 $('#pair-linkform').onsubmit = event => {
   event.preventDefault();
-  try {
-    const link = new URL(new FormData(event.target).get('link'));
-    const code = new URLSearchParams(link.hash.slice(1)).get('pair');
-    if (link.origin !== location.origin || !/^[a-f0-9]{64}$/.test(code || '')) throw Error('Use a fresh pairing link for this controller.');
-    redeemPairing(code); event.target.reset();
-  } catch(error) {showError(error);}
+  try { stopPairScan(); redeemPairingLink(new FormData(event.target).get('link')); event.target.reset(); }
+  catch(error) {showError(error);}
 };
 window.addEventListener('hashchange', () => { const code = takePairingCode(); if (code) redeemPairing(code); });
 if (pairingCode) redeemPairing(pairingCode);

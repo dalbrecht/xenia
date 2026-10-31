@@ -88,7 +88,7 @@ On iPhone, open the verified HTTPS URL in Safari, use **Share → Add to Home
 Screen**, enable **Open as Web App** when offered, then add it. See
 [Apple's installation instructions](https://support.apple.com/guide/iphone/turn-a-website-into-an-app-iphea86e5236/ios).
 Launch Xenia from the new icon. Safari and the installed web app may use separate
-storage; if it asks you to connect again, use a fresh pairing link as described below. Verify a conversation,
+storage; if it asks you to connect again, use **Scan QR code** inside the installed app as described below. Verify a conversation,
 follow-up, cancellation, and reconnect on the actual phone before considering
 mobile setup complete. A trusted Tailscale HTTPS deployment has passed the browser
 manifest, service-worker, and offline-shell checks; that is not proof of iPhone
@@ -107,9 +107,13 @@ installation or interaction.
    automatically. A QR code cannot install or configure the phone's VPN.
 4. Use **Share → Add to Home Screen**, then launch Xenia from its icon. Verify
    conversations load. If the installed app asks for a login because it has
-   separate storage, generate another QR on the controller, copy its **Single-use
-   pairing link** to your phone, and paste it under **Use a pairing link instead**
-   in the installed app. The link must point to that same controller origin.
+   separate storage, select **Scan QR code** inside the installed app, allow camera
+   access, and scan a fresh code displayed on the controller. Camera frames are
+   processed locally; only the one-use code is sent to your controller. The camera
+   stops after decoding, when you select **Stop camera**, or when the app leaves
+   the foreground. If camera access is unavailable, copy the **Single-use pairing
+   link** to the phone and paste it under **Use a pairing link instead**. The link
+   must point to that same controller origin.
 
 Each QR/link expires after two minutes and works once. Generating another code
 or closing the pairing dialog invalidates the outstanding code. Keep the dialog

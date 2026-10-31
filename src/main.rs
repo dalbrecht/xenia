@@ -1096,6 +1096,21 @@ async fn handle_request(
             ),
             "/" => response(200, HTML, "text/html; charset=utf-8"),
             "/app.js" => response(200, JS, "text/javascript; charset=utf-8"),
+            "/pair-scanner.js" => response(
+                200,
+                include_str!("../web/pair-scanner.js"),
+                "text/javascript; charset=utf-8",
+            ),
+            "/vendor/jsQR-1.4.0.js" => response(
+                200,
+                include_str!("../web/vendor/jsQR-1.4.0.js"),
+                "text/javascript; charset=utf-8",
+            ),
+            "/vendor/jsQR-LICENSE.txt" => response(
+                200,
+                include_str!("../web/vendor/jsQR-LICENSE.txt"),
+                "text/plain; charset=utf-8",
+            ),
             "/event-format.js" => response(200, EVENTS_JS, "text/javascript; charset=utf-8"),
             "/style.css" => response(200, CSS, "text/css; charset=utf-8"),
             "/manifest.webmanifest" => response(200, MANIFEST, "application/manifest+json"),
