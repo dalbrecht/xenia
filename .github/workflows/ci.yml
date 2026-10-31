@@ -38,6 +38,15 @@ jobs:
         run: python tests/history_api.py
       - name: Worker HTTPS verification and redirects
         run: python tests/worker_transport.py
+      - name: Project assignment protocol and recovery
+        run: python tests/project_assignment_api.py
+      - name: Native project provisioning and local permissions
+        run: python tests/project_environments.py
+      - name: Container and hybrid environment lifecycle
+        if: runner.os == 'Linux'
+        env:
+          XENIA_TEST_DOCKER: '1'
+        run: python3 tests/project_environments.py
       - name: Node request and approval enrollment
         run: python tests/node_pairing.py
       - name: QR device pairing and revocation

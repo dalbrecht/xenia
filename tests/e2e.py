@@ -59,7 +59,7 @@ try:
  worker_req('heartbeat',{'id':'test','name':'test','capacity':1,'runners':['codex'],'instance_id':'replacement'})
  expect_status(worker_token,'claim',claim,400)
  worker_req('retire',{'id':'test','instance_id':'replacement'});print('duplicate and stale worker instances are fenced: PASS')
- env=env|{'XENIA_WORKER_TOKEN':worker_token,'XENIA_WORKER_DB':str(root/'worker.db'),'XENIA_STOP_FILE':str(root/'stop'),'GIT_DIR':str(root/'wrong-git-dir'),'GIT_WORK_TREE':str(root/'wrong-worktree'),'GIT_INDEX_FILE':str(root/'wrong-index'),'XENIA_CONTROLLER':url,'XENIA_NODE_ID':'test','XENIA_PROJECTS_ROOT':str(root/'projects'),'PATH':str(bindir)+':'+os.environ['PATH']};procs.append(subprocess.Popen([binary,'worker'],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL));until(lambda:req('state')['nodes'])
+ env=env|{'XENIA_CAPACITY':'2','XENIA_WORKER_TOKEN':worker_token,'XENIA_WORKER_DB':str(root/'worker.db'),'XENIA_STOP_FILE':str(root/'stop'),'GIT_DIR':str(root/'wrong-git-dir'),'GIT_WORK_TREE':str(root/'wrong-worktree'),'GIT_INDEX_FILE':str(root/'wrong-index'),'XENIA_CONTROLLER':url,'XENIA_NODE_ID':'test','XENIA_PROJECTS_ROOT':str(root/'projects'),'PATH':str(bindir)+':'+os.environ['PATH']};procs.append(subprocess.Popen([binary,'worker'],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL));until(lambda:req('state')['nodes']);req('nodes/capacity',{'id':'test','capacity':1})
  job=req('jobs',{'project_id':project,'runner':'codex','prompt':'prompt-marker first'})['id']
  find=lambda:next(j | {'output':req('outputs',{'ids':[job]})[job]} for j in req('state')['jobs'] if j['id']==job)
  until(lambda:find()['state']=='running' and 'early' in find()['output']); print('streamed output before exit: PASS')

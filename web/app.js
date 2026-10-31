@@ -76,7 +76,7 @@ const jobStateAppearance = {
   queued:['clock','amber'],running:['spinner','blue'],succeeded:['check','green'],failed:['error','red'],
   canceled:['cancel','slate'],cancel_requested:['stop','amber'],interrupted:['warning','amber'],
   unknown:['question','amber'],awaiting_approval:['pause','purple'],needs_review:['warning','amber'],
-  online:['check','green'],offline:['cancel','slate'],never_connected:['clock','amber'],revoked:['stop','red']
+  online:['check','green'],offline:['cancel','slate'],never_connected:['clock','amber'],revoked:['stop','red'],ready:['check','green'],preparing:['spinner','blue'],needs_setup:['warning','amber'],removed:['cancel','slate']
 };
 function status(value) {
   const [icon,tone] = jobStateAppearance[value] || ['question','slate'];
@@ -153,6 +153,20 @@ function enrollmentRequests() {
   const requests = state.enrollments || [];
   return `<section class="enrollment-requests"><h2>Connect a worker</h2><p>In the desktop worker, enter this controller’s HTTPS address and choose Request access. Compare its code here before approving. Requests expire after five minutes. Device names and platforms are self-reported.</p><label>Controller address<input aria-label="Worker controller address" readonly value="${escapeHtml(location.origin)}"></label>${requests.map(r => `<article class="enrollment-card"><div><strong>${escapeHtml(r.name)}</strong><small>${escapeHtml(r.node_id)} · ${escapeHtml(r.platform)}</small></div><code class="enrollment-code">${escapeHtml(r.code)}</code><small>Expires ${escapeHtml(new Date(r.expires * 1000).toLocaleTimeString())}</small>${r.state === 'approved' ? '<span class="status running">Approved · waiting for worker</span>' : `<div class="enrollment-actions"><button class="primary" data-enrollment="${escapeHtml(r.id)}" data-decision="approved">Approve worker</button><button class="secondary" data-enrollment="${escapeHtml(r.id)}" data-decision="rejected">Reject</button></div>`}</article>`).join('')}</section>`;
 }
+function nodePolicy(node) { try { return typeof node.policy === 'string' ? JSON.parse(node.policy) : node.policy || {}; } catch { return {}; } }
+function policySummary(node) {
+  const p = nodePolicy(node);
+  if (!p.platform) return '<small>Update this worker to configure local project permissions.</small>';
+  return `<details class="node-policy"><summary>Local permissions · ${escapeHtml(p.platform)} · maximum ${escapeHtml(p.max_workers)} workers</summary><p>${escapeHtml((p.runners || []).join(', ') || 'No runners allowed')}<br>Checkouts: ${p.project_checkout ? 'allowed' : 'blocked'} · Scripts: ${p.setup_scripts ? 'allowed' : 'blocked'} · Docker: ${p.containers ? 'allowed' : 'blocked'}<br>Projects: ${escapeHtml(p.projects?.length ? p.projects.join(', ') : 'All project directories')}</p><small>Change these settings in the desktop app on this node.</small></details>`;
+}
+function assignmentCard(a) {
+  const node = state.nodes.find(n => n.id === a.node_id);
+  return `<article class="assignment-card" data-assignment="${escapeHtml(a.id)}"><div><strong>${escapeHtml(node?.name || a.node_id)}</strong>${status(a.state)}<small>${escapeHtml(a.step || (a.state === 'queued' ? 'Waiting for worker and available capacity' : ''))}</small>${a.worktree ? `<small class="path">Setup worktree: ${escapeHtml(a.worktree)}</small>` : ''}${a.revision ? `<small>Revision ${escapeHtml(a.revision.slice(0,12))}</small>` : ''}</div>${a.error ? `<p class="error">${escapeHtml(a.error)}</p>` : ''}${a.log ? `<details><summary>Latest setup output</summary><pre>${escapeHtml(a.log)}</pre></details>` : ''}<div class="assignment-actions">${['failed','unknown','needs_setup'].includes(a.state) ? `<button class="secondary" data-prepare="${escapeHtml(a.id)}">Retry setup</button>` : ''}${!['preparing','unknown','removed'].includes(a.state) ? `<button class="secondary" data-unassign="${escapeHtml(a.id)}">Unassign</button>` : ''}</div></article>`;
+}
+function projectCard(p) {
+  const assignments=(state.assignments || []).filter(a => a.project_id === p.id && a.state !== 'removed');
+  return `<article class="project-card"><div class="project-heading"><div><h3>${escapeHtml(p.name)} / ${escapeHtml(p.repository)}</h3><small>${escapeHtml(p.environment?.mode || 'Manual checkout')} ${p.environment ? `· ${escapeHtml(p.environment.ref)}` : ''}</small></div><div class="assignment-actions"><button class="secondary" data-environment="${escapeHtml(p.id)}">Environment</button><button class="primary" data-assign="${escapeHtml(p.id)}" ${p.environment ? '' : 'disabled title="Configure the project environment first"'}>Assign node</button></div></div>${assignments.map(assignmentCard).join('')}</article>`;
+}
 function render() {
   $('#title').textContent = { conversations:'Conversations', queue:'Work queue', nodes:'Nodes', projects:'Projects' }[view];
   document.querySelectorAll('nav button').forEach(button => button.classList.toggle('selected', button.dataset.view === view));
@@ -166,11 +180,12 @@ function render() {
     else html += `<div class="work-list">${visible.map(row => workRow(row.id, row.jobs)).join('')}</div>`;
     html += pageControls('work', state, workspaceHistory);
   } else if (view === 'nodes') {
-    html = `<div class="section-heading"><div><h2>Worker nodes</h2><p>Machines available to run your agents.</p></div><span class="count">${state.nodes.length} total</span></div>` + (state.nodes.length ? `<div class="work-list">${state.nodes.map(n => `<div class="work-row node-row"><span class="job-icon node-icon">▣</span><span class="job-main"><strong>${escapeHtml(n.name)}</strong><small>${escapeHtml(JSON.parse(n.runners).join(', ') || 'No runners detected')} · ${n.occupied ?? 0} / ${n.capacity} occupied</small></span>${status(n.enrolled === 0 ? 'revoked' : n.connected_before === 0 ? 'never_connected' : state.now - n.last_seen < 15 ? 'online' : 'offline')}<button data-capacity="${escapeHtml(n.id)}" class="secondary" ${n.connected_before === 0 ? 'disabled title="Capacity can be changed after the worker first connects"' : ''}>Set capacity</button>${n.enrolled === 0 ? '' : `<button data-revoke="${escapeHtml(n.id)}" class="secondary">Revoke</button>`}</div>`).join('')}</div>` : '<div class="empty"><h3>No nodes connected</h3><p>Start a worker to make it available here.</p></div>');
+    html = `<div class="section-heading"><div><h2>Worker nodes</h2><p>Machines available to run your agents.</p></div><span class="count">${state.nodes.length} total</span></div>` + (state.nodes.length ? `<div class="work-list">${state.nodes.map(n => `<div class="work-row node-row"><span class="job-icon node-icon">▣</span><span class="job-main"><strong>${escapeHtml(n.name)}</strong><small>${escapeHtml(JSON.parse(n.runners).join(', ') || 'No runners detected')} · ${n.occupied ?? 0} / ${n.capacity} occupied</small>${policySummary(n)}</span>${status(n.enrolled === 0 ? 'revoked' : n.connected_before === 0 ? 'never_connected' : state.now - n.last_seen < 15 ? 'online' : 'offline')}<button data-capacity="${escapeHtml(n.id)}" class="secondary" ${n.connected_before === 0 ? 'disabled title="Capacity can be changed after the worker first connects"' : ''}>Set capacity</button>${n.enrolled === 0 ? '' : `<button data-revoke="${escapeHtml(n.id)}" class="secondary">Revoke</button>`}</div>`).join('')}</div>` : '<div class="empty"><h3>No nodes connected</h3><p>Start a worker to make it available here.</p></div>');
     html = enrollmentRequests() + html;
   } else {
-    html = `<div class="section-heading"><div><h2>Projects</h2><p>Repositories available for agent work.</p></div><span class="count">${state.projects.length} total</span></div>` + (state.projects.length ? `<div class="work-list">${state.projects.map(p => `<div class="work-row"><span class="job-icon">▤</span><span class="job-main"><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.repository)}</small></span></div>`).join('')}</div>` : '<div class="empty"><h3>No projects yet</h3><p>Add a project and repository to get started.</p><button class="secondary" id="empty-action">Add a project</button></div>');
+    html = `<div class="section-heading"><div><h2>Projects</h2><p>Repositories available for agent work.</p></div><span class="count">${state.projects.length} total</span></div>` + (state.projects.length ? `<div class="project-list">${state.projects.map(projectCard).join('')}</div>` : '<div class="empty"><h3>No projects yet</h3><p>Add a project and repository to get started.</p><button class="secondary" id="empty-action">Add a project</button></div>');
   }
+  if(view === 'queue') { const pending=(state.assignments || []).filter(a => ['queued','preparing','unknown'].includes(a.state)); if(pending.length) html = `<section class="setup-queue"><h2>Environment setup</h2>${pending.map(assignmentCard).join('')}</section>` + html; }
   $('#content').innerHTML = html;
   document.querySelectorAll('[data-job]').forEach(b => b.onclick = () => {
     const id = selected === b.dataset.job ? null : b.dataset.job;
@@ -191,7 +206,17 @@ function render() {
     try { await api('node-pairing/decide', {id:request.id, code:request.code, decision:b.dataset.decision}); await refresh(); }
     catch (error) { showError(error); b.disabled = false; }
   });
-  document.querySelectorAll('[data-capacity]').forEach(b => b.onclick = () => { const value = window.prompt('Maximum simultaneous jobs (1–64)'); if (value !== null) act('nodes/capacity', { id:b.dataset.capacity, capacity:Number(value) }); });
+  document.querySelectorAll('[data-environment]').forEach(b => b.onclick=()=>openEnvironment(b.dataset.environment));
+  document.querySelectorAll('[data-assign]').forEach(b => b.onclick=()=>openAssignment(b.dataset.assign));
+  document.querySelectorAll('[data-prepare]').forEach(b => b.onclick=async()=>{
+    const a=(state.assignments || []).find(a=>a.id===b.dataset.prepare);if(!a)return;
+    const stopped=a.state==='unknown';if(!window.confirm(stopped ? 'Inspect the prior setup process on this node first. Confirm it has stopped, then retry setup?' : 'Run the configured project setup again on this node?'))return;
+    await act('projects/assign',{project_id:a.project_id,node_id:a.node_id,process_stopped:stopped});
+  });
+  document.querySelectorAll('[data-unassign]').forEach(b => b.onclick=async()=>{
+    const a=(state.assignments || []).find(a=>a.id===b.dataset.unassign);if(a && window.confirm('Unassign this project from the node? Code and retained worktrees are kept.'))await act('projects/unassign',{project_id:a.project_id,node_id:a.node_id});
+  });
+  document.querySelectorAll('[data-capacity]').forEach(b => b.onclick = () => { const node=state.nodes.find(n=>n.id===b.dataset.capacity), max=nodePolicy(node || {}).max_workers || 64; const value = window.prompt(`Maximum simultaneous jobs (1–${max}; local limit set on the node)`); if (value !== null) act('nodes/capacity', { id:b.dataset.capacity, capacity:Number(value) }); });
   document.querySelectorAll('[data-revoke]').forEach(b => b.onclick = () => { if (window.confirm('Revoke this worker credential? The worker will lose access, including the ability to report running work.')) act('workers/revoke', { id:b.dataset.revoke }); });
   document.querySelectorAll('[data-cleanup]').forEach(b => b.onclick = () => { if (window.confirm('Remove this worktree? Git will refuse if it contains uncommitted changes. The branch will be kept.')) act('cleanup', { id:b.dataset.cleanup }); });
   document.querySelectorAll('[data-cleanup-resolve]').forEach(b => b.onclick = () => { const value = window.prompt('After checking the worker, type removed if the worktree is gone, or retained if it still exists.'); if (value === 'removed' || value === 'retained') act('cleanup/resolve', { id:b.dataset.cleanupResolve, removed:value === 'removed' }); });
@@ -292,7 +317,7 @@ async function changeOutputPage(id, direction) {
   render();
 }
 function fingerprint(data) {
-  return JSON.stringify({projects:data.projects,jobs:data.jobs,total:data.total,has_more:data.has_more,enrollments:data.enrollments,nodes:data.nodes.map(({last_seen,...node}) => ({...node,online:data.now-last_seen<15}))});
+  return JSON.stringify({projects:data.projects,jobs:data.jobs,total:data.total,has_more:data.has_more,enrollments:data.enrollments,assignments:data.assignments,nodes:data.nodes.map(({last_seen,...node}) => ({...node,online:data.now-last_seen<15}))});
 }
 async function refresh() {
   const generation = workspaceGeneration, request = ++workspaceRequest;
@@ -321,7 +346,10 @@ function updateNodeChoices() {
   let eligibleCount = 0;
   select.innerHTML = '<option value="">Automatic</option>' + state.nodes.map(node => {
     const missing = [];
-    if (!JSON.parse(node.runners).includes(runner)) missing.push('agent unavailable');
+    const assignment=(state.assignments || []).find(a=>a.node_id===node.id && a.project_id===project && a.state==='ready');
+    const environment=state.projects.find(p=>p.id===project)?.environment;
+    if (!JSON.parse(node.runners).includes(runner) || environment?.mode==='container' && !(assignment?.runners || []).includes(runner)) missing.push('agent unavailable');
+    if (environment && !assignment) missing.push('project setup not ready');
     if (!JSON.parse(node.eligible).includes(project)) missing.push('checkout missing or invalid');
     const offline = state.now - node.last_seen >= 15;
     if (missing.length) unavailable.push(`${node.name}: ${missing.join(', ')}`); else eligibleCount++;
@@ -348,6 +376,36 @@ $('#new').onclick = () => {
 document.querySelectorAll('.close').forEach(b => b.onclick = () => { const dialog = b.closest('dialog'); dialog.close(); dialog.querySelectorAll('.dialog-error').forEach(e => e.textContent = ''); if (dialog.id === 'worker-dialog') $('#worker-token').value = ''; if (dialog.id === 'compose') render(); });
 $('#jobform').onsubmit = async event => { event.preventDefault(); if (event.target.elements.node_id.selectedOptions[0]?.disabled) { showError(Error('The selected node is no longer eligible. Choose another node or Automatic.')); return; } try { await api('jobs', Object.fromEntries(new FormData(event.target))); event.target.reset(); $('#compose').close(); view = 'queue'; resetWorkspacePage(); await refresh(); } catch (error) { showError(error); } };
 $('#projectform').onsubmit = async event => { event.preventDefault(); try { await api('projects', Object.fromEntries(new FormData(event.target))); event.target.reset(); $('#project-dialog').close(); await refresh(); } catch (error) { showError(error); } };
+function environmentFields() {
+  const f=$('#environmentform'),mode=f.elements.mode.value;
+  $('#environment-windows').hidden=mode==='container';$('#environment-container').hidden=mode!=='container';$('#environment-hybrid').hidden=mode!=='hybrid';
+  f.elements.image.required=mode==='container';f.elements.compose.required=mode==='hybrid';
+}
+function openEnvironment(id) {
+  const p=state.projects.find(p=>p.id===id);if(!p)return;
+  const f=$('#environmentform');f.reset();f.elements.project_id.value=id;
+  $('#environment-project').textContent=`${p.name} / ${p.repository}`;
+  for(const key of ['source','ref','mode','windows_setup','unix_setup','image','compose'])if(p.environment?.[key]!==undefined)f.elements[key].value=p.environment[key];
+  environmentFields();$('#environment-dialog').showModal();
+}
+function assignmentReason(node,p) {
+  const policy=nodePolicy(node),c=p.environment;
+  if(!policy.project_checkout)return 'Enable project checkouts in the node app';
+  if(policy.projects?.length && !policy.projects.includes(p.name))return 'Project is not allowed by this node';
+  if(c.mode!=='native' && !policy.containers)return 'Docker is blocked by this node';
+  const script=c.mode==='container' || policy.platform!=='windows' ? c.unix_setup : c.windows_setup;
+  if(script && !policy.setup_scripts)return 'Setup scripts are blocked by this node';
+  return '';
+}
+function openAssignment(id) {
+  const p=state.projects.find(p=>p.id===id);if(!p?.environment)return;
+  const f=$('#assignmentform');f.elements.project_id.value=id;$('#assignment-project').textContent=`${p.name} / ${p.repository} · ${p.environment.mode}`;
+  f.elements.node_id.innerHTML=state.nodes.filter(n=>n.enrolled!==0).map(n=>{const reason=assignmentReason(n,p);return `<option value="${escapeHtml(n.id)}" ${reason ? 'disabled' : ''}>${escapeHtml(n.name)}${reason ? ' — '+escapeHtml(reason) : ''}</option>`}).join('');
+  $('#assignment-dialog').showModal();
+}
+$('#environmentform').elements.mode.onchange=environmentFields;
+$('#environmentform').onsubmit=async event=>{event.preventDefault();try{await api('projects/environment',Object.fromEntries(new FormData(event.target)));$('#environment-dialog').close();await refresh();}catch(error){showError(error);}};
+$('#assignmentform').onsubmit=async event=>{event.preventDefault();const body=Object.fromEntries(new FormData(event.target));if(!body.node_id){showError(Error('Enable the required permissions in the target node app first.'));return;}try{await api('projects/assign',body);$('#assignment-dialog').close();await refresh();}catch(error){showError(error);}};
 $('#workerform').onsubmit = async event => { event.preventDefault(); try { const result = await api('workers/enroll', Object.fromEntries(new FormData(event.target))); $('#workerform').hidden = true; $('#worker-result').hidden = false; $('#worker-token').value = result.token; await refresh(); } catch (error) { showError(error); } };
 $('#sign-out').onclick = () => {
   if (localStorage.getItem('xenia-device-token')) fetch('/api/pairing/end', {method:'POST', headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:'{}'}).catch(() => {});

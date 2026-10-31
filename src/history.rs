@@ -169,7 +169,12 @@ pub fn handle(
             &["id", "name", "repository"],
             [],
         )?;
-        result["nodes"] = list_params(db,"WITH identities(id) AS (SELECT id FROM nodes UNION SELECT node_id FROM worker_credentials) SELECT i.id,COALESCE(n.name,i.id),COALESCE(n.capacity,1),COALESCE(n.last_seen,0),COALESCE(n.runners,'[]'),COALESCE(n.eligible,'[]'),(SELECT COUNT(*) FROM jobs j WHERE j.node_id=i.id AND j.state IN ('running','cancel_requested','unknown')),EXISTS(SELECT 1 FROM worker_credentials c WHERE c.node_id=i.id),n.id IS NOT NULL FROM identities i LEFT JOIN nodes n ON n.id=i.id ORDER BY COALESCE(n.name,i.id),i.id",&["id","name","capacity","last_seen","runners","eligible","occupied","enrolled","connected_before"],[])?;
+        result["nodes"] = list_params(db,"WITH identities(id) AS (SELECT id FROM nodes UNION SELECT node_id FROM worker_credentials) SELECT i.id,COALESCE(n.name,i.id),COALESCE(n.capacity,1),COALESCE(n.last_seen,0),COALESCE(n.runners,'[]'),COALESCE(n.eligible,'[]'),(SELECT COUNT(*) FROM jobs j WHERE j.node_id=i.id AND j.state IN ('running','cancel_requested','unknown'))+(SELECT COUNT(*) FROM project_assignments a WHERE a.node_id=i.id AND a.state IN ('preparing','unknown')),EXISTS(SELECT 1 FROM worker_credentials c WHERE c.node_id=i.id),n.id IS NOT NULL,COALESCE(n.policy,'{}') FROM identities i LEFT JOIN nodes n ON n.id=i.id ORDER BY COALESCE(n.name,i.id),i.id",&["id","name","capacity","last_seen","runners","eligible","occupied","enrolled","connected_before","policy"],[])?;
+        for p in result["projects"].as_array_mut().unwrap() {
+            p["environment"] = crate::provisioning::config(db, p["id"].as_str().unwrap_or(""))?
+                .unwrap_or(Value::Null);
+        }
+        result["assignments"] = crate::provisioning::assignments(db)?;
         result["now"] = json!(now());
         return Ok(Some(result));
     }

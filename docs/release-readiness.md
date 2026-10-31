@@ -14,6 +14,23 @@ supported release behavior. No public release tag has been created.
 | Cancellation and explicit cleanup | Synthetic process-supervision tests, dirty-worktree refusal, retained branches; real macOS Claude waiting-run cancellation; operator confirmed running Codex work reaches Canceled and explicit cleanup reaches Succeeded from the installed iPhone app | Native Windows process-tree cancellation and cleanup |
 | Both runners complete work | Real macOS Codex and Claude initial conversations, follow-ups, and disposable edit checks; experimental approval transports tested separately | Native Windows real-provider tasks and supported-version compatibility |
 
+## Project assignment and node policy additions
+
+- Per-project Native, Container and Hybrid selection is implemented with managed
+  HTTPS checkout, pinned revisions, detached preparation worktrees and readiness
+  gating. Existing manual projects retain their prior behavior.
+- Native and real Docker/Compose fixtures passed clone, worktree setup,
+  scheduling, follow-up, cancellation, cleanup and primary-checkout preservation.
+  Docker validation used an existing engine with an already-shared directory;
+  no engine installation or mount changes were made.
+- Assignment API checks pass capacity accounting, scope, replay, environment
+  snapshots, worker restart uncertainty and stale-outbox acknowledgement.
+- Project selection, denied-node choices, state/log rendering and read-only node
+  permissions pass Chromium at 320 px and WebKit at 1440 px.
+- macOS and Windows UI compilation passed. The macOS child-settings probe verifies
+  local permissions override inherited flags. Installed Windows permission and
+  real-provider project-assignment acceptance remain outstanding.
+
 ## Operational gates
 
 - Native apps: macOS release compilation, staging, rollback simulation, ad-hoc
@@ -26,7 +43,7 @@ supported release behavior. No public release tag has been created.
   with the registered checkout eligible. Windows
   WPF cross-compilation has passed; native build, installation, credentials,
   tunnel recovery, and runtime checks are outstanding.
-- Browser regressions: a pinned development-only Playwright setup now defines thirteen
+- Browser regressions: a pinned development-only Playwright setup now defines fifteen
   cases per engine for Chromium and WebKit. The original nine-case suites passed locally,
   including 320 px approvals, history paging, camera decoding, sign-out and a
   separate service-worker offline-shell check. The added independent job/worktree
@@ -34,7 +51,9 @@ supported release behavior. No public release tag has been created.
   Chromium and WebKit at 320 and 1440 px. GitHub Actions is configured to run
   the same matrix; hosted runs exposed Windows fixture cleanup and Linux
   WebKit synthetic playback issues, now addressed in the fixtures. A fully
-  passing hosted matrix still needs confirmation. The installed trusted
+  passing hosted matrix was subsequently observed after the Windows Git path
+  fix, including native Windows synthetic follow-up, cancellation and cleanup.
+  Newly added project/environment checks still need their hosted run. The installed trusted
   HTTPS endpoint also passed the WebKit PWA check with certificate validation.
   Node enrollment approve/reject journeys pass at 320 px in both engines and
   at 1440 px in WebKit, including dismissed approval and escaped device names.

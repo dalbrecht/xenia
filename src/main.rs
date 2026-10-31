@@ -24,8 +24,11 @@ mod claude_worker;
 mod codex_protocol;
 mod codex_worker;
 mod enrollment;
+mod environment;
 mod history;
 mod pairing;
+mod policy;
+mod provisioning;
 mod transport;
 
 const HTML: &str = include_str!("../web/index.html");
@@ -150,6 +153,7 @@ fn setup(path: &str) -> Result<Connection, String> {
     db.execute_batch("CREATE TABLE IF NOT EXISTS received_reports(id TEXT PRIMARY KEY); CREATE TABLE IF NOT EXISTS worker_credentials(node_id TEXT PRIMARY KEY, digest TEXT NOT NULL); CREATE TABLE IF NOT EXISTS cleanups(id TEXT PRIMARY KEY, job_id TEXT NOT NULL, node_id TEXT NOT NULL, worktree TEXT NOT NULL, state TEXT NOT NULL, error TEXT); CREATE TABLE IF NOT EXISTS claim_attempts(id TEXT PRIMARY KEY, node_id TEXT NOT NULL, kind TEXT NOT NULL, work_id TEXT NOT NULL, response TEXT NOT NULL);")
         .map_err(|e| e.to_string())?;
     enrollment::setup(&db)?;
+    provisioning::setup(&db)?;
     db.execute_batch("CREATE TABLE IF NOT EXISTS approval_requests(id TEXT PRIMARY KEY, job_id TEXT NOT NULL, node_id TEXT NOT NULL, instance_id TEXT NOT NULL, kind TEXT NOT NULL, details TEXT NOT NULL, decision TEXT, created INTEGER NOT NULL, decided INTEGER); CREATE INDEX IF NOT EXISTS approval_requests_job ON approval_requests(job_id,created);").map_err(|e| e.to_string())?;
     for sql in [
         "ALTER TABLE jobs ADD COLUMN parent_id TEXT",
@@ -158,6 +162,7 @@ fn setup(path: &str) -> Result<Connection, String> {
         "ALTER TABLE jobs ADD COLUMN permission_denied INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE nodes ADD COLUMN instance_id TEXT",
         "ALTER TABLE nodes ADD COLUMN eligible TEXT NOT NULL DEFAULT '[]'",
+        "ALTER TABLE nodes ADD COLUMN policy TEXT NOT NULL DEFAULT '{}'",
         "ALTER TABLE approval_requests ADD COLUMN delivered INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE approval_requests ADD COLUMN answers TEXT",
         "ALTER TABLE approval_requests ADD COLUMN withdrawn INTEGER NOT NULL DEFAULT 0",
@@ -293,6 +298,9 @@ fn approval_reviewable(kind: &str, details: &Value) -> bool {
 }
 fn api(db: &Db, method: &Method, path: &str, v: Value) -> Result<Value, String> {
     let db = db.lock().map_err(|e| e.to_string())?;
+    if let Some(result) = provisioning::handle(&db, method, path, &v)? {
+        return Ok(result);
+    }
     if let Some(result) = history::handle(&db, method, path, &v)? {
         return Ok(result);
     }
@@ -442,7 +450,9 @@ fn api(db: &Db, method: &Method, path: &str, v: Value) -> Result<Value, String> 
                     serde_json::from_str(&runners).map_err(|e| e.to_string())?;
                 let eligible: Vec<String> =
                     serde_json::from_str(&eligible).map_err(|e| e.to_string())?;
-                if !runners.iter().any(|item| item == runner) {
+                if !runners.iter().any(|item| item == runner)
+                    || !provisioning::runner_ready(&db, n, project, runner)
+                {
                     return Err("Selected node does not report this runner".into());
                 }
                 if !eligible.iter().any(|item| item == project) {
@@ -521,17 +531,50 @@ fn api(db: &Db, method: &Method, path: &str, v: Value) -> Result<Value, String> 
             {
                 tx.execute("UPDATE jobs SET state='unknown',error='Worker restarted; process status requires manual inspection' WHERE node_id=?1 AND state IN ('running','cancel_requested')",[node]).map_err(|e|e.to_string())?;
                 tx.execute("UPDATE cleanups SET state='unknown',error='Worker restarted during cleanup; inspect the worktree' WHERE node_id=?1 AND state='running'",[node]).map_err(|e|e.to_string())?;
+                tx.execute("UPDATE project_assignments SET state='unknown',step='Worker restarted; inspect prior setup before retrying',updated=?2 WHERE node_id=?1 AND state='preparing'",params![node,now()]).map_err(|e|e.to_string())?;
             }
             tx.execute("INSERT INTO nodes(id,name,capacity,last_seen,runners,instance_id) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(id) DO UPDATE SET name=excluded.name,last_seen=excluded.last_seen,runners=excluded.runners,instance_id=excluded.instance_id",params![node,name,capacity as i64,now(),serde_json::to_string(runners).unwrap(),instance]).map_err(|e|e.to_string())?;
+            if let Some(policy) = v.get("policy") {
+                policy::validate_reported(policy)?;
+                if policy.to_string().len() > 32768 {
+                    return Err("Node policy exceeds limits".into());
+                }
+                tx.execute(
+                    "UPDATE nodes SET policy=?2,capacity=MIN(capacity,?3) WHERE id=?1",
+                    params![
+                        node,
+                        policy.to_string(),
+                        policy["max_workers"]
+                            .as_u64()
+                            .filter(|c| *c > 0 && *c <= 64)
+                            .ok_or("Invalid local maximum workers")? as i64
+                    ],
+                )
+                .map_err(|e| e.to_string())?;
+            }
             tx.commit().map_err(|e| e.to_string())?;
             let configured: i64 = db
                 .query_row("SELECT capacity FROM nodes WHERE id=?1", [node], |r| {
                     r.get(0)
                 })
                 .map_err(|e| e.to_string())?;
-            Ok(
-                json!({"ok":true,"capacity":configured,"projects":list(&db,"SELECT id,name,repository FROM projects", &["id","name","repository"])?}),
-            )
+            let mut projects = list(
+                &db,
+                "SELECT id,name,repository FROM projects",
+                &["id", "name", "repository"],
+            )?;
+            for p in projects.as_array_mut().unwrap() {
+                p["available"] = json!(provisioning::ready(
+                    &db,
+                    node,
+                    p["id"].as_str().unwrap_or("")
+                ));
+                if p["available"] == true {
+                    p["environment"] = provisioning::config(&db, p["id"].as_str().unwrap_or(""))?
+                        .unwrap_or(Value::Null);
+                }
+            }
+            Ok(json!({"ok":true,"capacity":configured,"projects":projects}))
         }
         (&Method::POST, "/api/retire") => {
             let node = field(&v, "id")?;
@@ -615,7 +658,7 @@ fn api(db: &Db, method: &Method, path: &str, v: Value) -> Result<Value, String> 
                     |r| r.get(0),
                 )
                 .map_err(|e| e.to_string())?;
-            if active >= capacity {
+            if active + provisioning::active(&db, node)? >= capacity {
                 return Ok(Value::Null);
             }
             let rs: Vec<String> = serde_json::from_str(&runners).unwrap_or_default();
@@ -637,14 +680,17 @@ fn api(db: &Db, method: &Method, path: &str, v: Value) -> Result<Value, String> 
                 .map_err(|e| e.to_string())?
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|e| e.to_string())?;
-            let Some((job, project, repo, prompt, runner, worktree, branch, session, _)) =
+            let Some((job, project, repo, prompt, runner, worktree, branch, session, project_id)) =
                 candidates.into_iter().find(|x| {
-                    rs.contains(&x.4) && eligible.iter().any(|p| p.as_str() == Some(&x.8))
+                    rs.contains(&x.4)
+                        && provisioning::runner_ready(&db, node, &x.8, &x.4)
+                        && eligible.iter().any(|p| p.as_str() == Some(&x.8))
                 })
             else {
                 return Ok(Value::Null);
             };
-            let response = json!({"id":job,"project":project,"repository":repo,"prompt":prompt,"runner":runner,"worktree":worktree,"branch":branch,"session_id":session});
+            let environment = provisioning::job_environment(&db, &job, &project_id, node)?;
+            let response = json!({"environment":environment,"id":job,"project":project,"repository":repo,"prompt":prompt,"runner":runner,"worktree":worktree,"branch":branch,"session_id":session});
             let tx = db.unchecked_transaction().map_err(|e| e.to_string())?;
             let changed = tx
                 .execute(
@@ -655,6 +701,11 @@ fn api(db: &Db, method: &Method, path: &str, v: Value) -> Result<Value, String> 
             if changed != 1 {
                 return Err("Job was claimed concurrently; retry the request".into());
             }
+            tx.execute(
+                "INSERT OR REPLACE INTO job_environments VALUES(?1,?2)",
+                params![job, environment.to_string()],
+            )
+            .map_err(|e| e.to_string())?;
             tx.execute("INSERT INTO claim_attempts(id,node_id,kind,work_id,response) VALUES(?1,?2,'job',?3,?4)", params![request,node,job,response.to_string()]).map_err(|e|e.to_string())?;
             tx.commit().map_err(|e| e.to_string())?;
             Ok(response)
@@ -681,8 +732,8 @@ fn api(db: &Db, method: &Method, path: &str, v: Value) -> Result<Value, String> 
             }
             let item:Option<(String,String,String,String)>=db.query_row("SELECT c.id,c.worktree,p.name,p.repository FROM cleanups c JOIN jobs j ON j.id=c.job_id JOIN projects p ON p.id=j.project_id WHERE c.node_id=?1 AND c.state='queued' ORDER BY c.rowid LIMIT 1",[node],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional().map_err(|e|e.to_string())?;
             if let Some((id, path, project, repository)) = item {
-                let response =
-                    json!({"id":id,"worktree":path,"project":project,"repository":repository});
+                let environment:Option<String>=db.query_row("SELECT e.config FROM cleanups c JOIN job_environments e ON e.job_id=c.job_id WHERE c.id=?1",[&id],|r|r.get(0)).optional().map_err(|e|e.to_string())?;
+                let response = json!({"id":id,"worktree":path,"project":project,"repository":repository,"environment":environment.map(|s|serde_json::from_str::<Value>(&s)).transpose().map_err(|e|e.to_string())?});
                 let tx = db.unchecked_transaction().map_err(|e| e.to_string())?;
                 let changed = tx
                     .execute(
@@ -746,6 +797,16 @@ fn api(db: &Db, method: &Method, path: &str, v: Value) -> Result<Value, String> 
                 .and_then(Value::as_u64)
                 .filter(|x| (1..=64).contains(x))
                 .ok_or("Capacity must be 1–64")?;
+            let reported: String = db
+                .query_row("SELECT policy FROM nodes WHERE id=?1", [node], |r| r.get(0))
+                .map_err(|e| e.to_string())?;
+            let maximum = serde_json::from_str::<Value>(&reported)
+                .ok()
+                .and_then(|p| p["max_workers"].as_u64())
+                .unwrap_or(64);
+            if capacity > maximum {
+                return Err("Requested capacity exceeds the node's local maximum".into());
+            }
             let changed = db
                 .execute(
                     "UPDATE nodes SET capacity=?1 WHERE id=?2",
@@ -1222,6 +1283,8 @@ fn handle_api(
             | "/api/report"
             | "/api/cleanup/claim"
             | "/api/cleanup/report"
+            | "/api/provision/claim"
+            | "/api/provision/report"
     );
     if (worker_endpoint && worker_node.is_none()) || (!worker_endpoint && !admin) {
         return Ok(response(401, "Unauthorized", "text/plain"));
@@ -1242,6 +1305,7 @@ fn handle_api(
                 | "/api/eligibility"
                 | "/api/claim"
                 | "/api/cleanup/claim"
+                | "/api/provision/claim"
         ) {
             "id"
         } else {
@@ -1716,12 +1780,22 @@ fn work(
             return;
         }
     }
-    let run = || -> Result<(String, String, String), String> {
+    let mut environment_context: Option<(Value, PathBuf)> = None;
+    let mut run = || -> Result<(String, String, String), String> {
         let project = field(&job, "project")?;
         let repo = field(&job, "repository")?;
         if !component(project) || !component(repo) {
             return Err("Invalid repository path".into());
         }
+        let local_policy = policy::Policy::load()?;
+        if !local_policy
+            .runners
+            .iter()
+            .any(|r| Some(r.as_str()) == job["runner"].as_str())
+        {
+            return Err("This runner is disabled in the node's desktop app".into());
+        }
+        local_policy.environment(project, &job["environment"], false)?;
         let root = fs::canonicalize(&root).map_err(|e| format!("Projects root: {e}"))?;
         if !repository_is_eligible(&root, project, repo) {
             return Err("Checkout is missing, is not a repository root, or has no commit".into());
@@ -1752,7 +1826,11 @@ fn work(
             }
             (path, field(&job, "branch")?.to_string())
         } else {
-            let base = git(&["rev-parse", "HEAD"])?;
+            let base = job["environment"]["revision"]
+                .as_str()
+                .map(str::to_owned)
+                .map(Ok)
+                .unwrap_or_else(|| git(&["rev-parse", "HEAD"]))?;
             let project_dir = fs::canonicalize(root.join(project)).map_err(|e| e.to_string())?;
             if !project_dir.starts_with(&root) {
                 return Err("Project escapes projects root".into());
@@ -1782,13 +1860,60 @@ fn work(
             &outbox,
             json!({"id":jobid,"node_id":node,"state":"running","worktree":pathstr,"branch":branch}),
         )?;
+        let environment = job
+            .get("environment")
+            .cloned()
+            .unwrap_or(json!({"mode":"native"}));
+        environment_context = Some((environment.clone(), path.clone()));
+        if environment["mode"] == "container"
+            && ((job["runner"] == "codex"
+                && env::var("XENIA_CODEX_APP_SERVER").as_deref() == Ok("1"))
+                || (job["runner"] == "claude"
+                    && env::var("XENIA_CLAUDE_CONTROL").as_deref() == Ok("1")))
+        {
+            return Err("Interactive runner adapters are currently native-only; disable the experimental adapter before using a container project".into());
+        }
+        let last_control = std::cell::Cell::new(std::time::Instant::now() - Duration::from_secs(3));
+        let cancelled = std::cell::Cell::new(false);
+        let stop = || {
+            if last_control.get().elapsed() > Duration::from_secs(2) {
+                last_control.set(std::time::Instant::now());
+                if let Ok(v) = post(
+                    &url,
+                    &token,
+                    "/api/control",
+                    json!({"id":jobid,"node_id":node}),
+                ) {
+                    cancelled.set(v["state"] == "cancel_requested");
+                }
+            }
+            cancelled.get()
+        };
+        let mut progress = |log: &str| {
+            let _ = enqueue_output(
+                &outbox,
+                &jobid,
+                &node,
+                &format!("Environment setup:\n{log}\n"),
+                None,
+                false,
+            );
+        };
+        if job["worktree"].as_str().is_some() {
+            environment::resume(&environment, &path, &stop, &mut progress)?;
+        } else {
+            environment::prepare(&environment, &path, &stop, &mut progress)?;
+        }
         let runner = field(&job, "runner")?;
         let prompt = field(&job, "prompt")?;
         let session = job.get("session_id").and_then(Value::as_str);
         if session.is_some_and(|session| !valid_runner_session(session)) {
             return Err("Invalid runner session ID".into());
         }
-        if runner == "codex" && env::var("XENIA_CODEX_APP_SERVER").as_deref() == Ok("1") {
+        if environment["mode"] != "container"
+            && runner == "codex"
+            && env::var("XENIA_CODEX_APP_SERVER").as_deref() == Ok("1")
+        {
             return codex_worker::run(codex_worker::Context {
                 path: &path,
                 prompt,
@@ -1801,7 +1926,10 @@ fn work(
                 outbox: &outbox,
             });
         }
-        if runner == "claude" && env::var("XENIA_CLAUDE_CONTROL").as_deref() == Ok("1") {
+        if environment["mode"] != "container"
+            && runner == "claude"
+            && env::var("XENIA_CLAUDE_CONTROL").as_deref() == Ok("1")
+        {
             return claude_worker::run(codex_worker::Context {
                 path: &path,
                 prompt,
@@ -1853,6 +1981,16 @@ fn work(
             }
             _ => return Err("Unsupported runner".into()),
         };
+        if environment["mode"] == "container" {
+            cmd = environment::runner(
+                &environment,
+                &path,
+                runner,
+                cmd.get_args()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .collect(),
+            )?;
+        }
         #[cfg(windows)]
         {
             let mut host = Command::new(env::current_exe().map_err(|e| e.to_string())?);
@@ -2038,7 +2176,29 @@ fn work(
             thread::sleep(Duration::from_millis(500));
         }
     };
-    match run() {
+    let mut outcome = run();
+    if let Some((environment, path)) = environment_context {
+        if let Err(error) = environment::finish(&environment, &path, &|| false) {
+            outcome = Ok((
+                "unknown".into(),
+                String::new(),
+                format!("Environment shutdown requires inspection: {error}"),
+            ));
+        }
+    }
+    if outcome.is_err() {
+        if let Ok(control) = post(
+            &url,
+            &token,
+            "/api/control",
+            json!({"id":jobid,"node_id":node}),
+        ) {
+            if control["state"] == "cancel_requested" {
+                outcome = Ok(("canceled".into(), String::new(), String::new()));
+            }
+        }
+    }
+    match outcome {
         Ok((state, output, error)) => {
             if let Err(e) = enqueue(
                 &outbox,
@@ -2074,6 +2234,20 @@ fn cleanup(item: &Value, root: &Path) -> Result<(), String> {
     {
         return Err("Worktree path is outside its expected directory".into());
     }
+    // Preserve dirty worktrees before touching their environment.
+    let mut status = Command::new("git");
+    status
+        .arg("-C")
+        .arg(external_path(&path))
+        .args(["status", "--porcelain"]);
+    scrub_xenia_env(&mut status);
+    let clean = status.output().map_err(|e| e.to_string())?;
+    if !clean.status.success() || !clean.stdout.is_empty() {
+        return Err(
+            "Worktree contains uncommitted changes; preserve or commit them before cleanup".into(),
+        );
+    }
+    environment::remove(&item["environment"], &path)?;
     let mut command = Command::new("git");
     command
         .arg("-C")
@@ -2088,6 +2262,7 @@ fn cleanup(item: &Value, root: &Path) -> Result<(), String> {
     Ok(())
 }
 fn worker() -> Result<(), String> {
+    let policy = policy::Policy::load()?;
     let token = config("XENIA_WORKER_TOKEN")?;
     let url = config("XENIA_CONTROLLER")?;
     transport::validate(&url)?;
@@ -2137,13 +2312,13 @@ fn worker() -> Result<(), String> {
         }
         let runners: Vec<&str> = ["codex", "claude"]
             .into_iter()
-            .filter(|s| executable(s))
+            .filter(|s| executable(s) && policy.runners.iter().any(|r| r == s))
             .collect();
         let hb = post(
             &url,
             &token,
             "/api/heartbeat",
-            json!({"id":node,"name":name,"capacity":capacity,"runners":runners,"instance_id":instance_id}),
+            json!({"id":node,"name":name,"capacity":capacity,"runners":runners,"instance_id":instance_id,"policy":policy}),
         );
         let hb = match hb {
             Ok(hb) => hb,
@@ -2153,11 +2328,46 @@ fn worker() -> Result<(), String> {
                 continue;
             }
         };
+        if tasks.len() < hb["capacity"].as_u64().unwrap_or(capacity).min(capacity) as usize {
+            let claim = id();
+            if let Some(item) = claim_with_retry(
+                &url,
+                &token,
+                "/api/provision/claim",
+                json!({"id":node,"instance_id":instance_id,"claim_id":claim}),
+                stop_file.as_deref(),
+            ) {
+                if !item.is_null() {
+                    let (r, n, i, o, stop) = (
+                        root.clone(),
+                        node.clone(),
+                        instance_id.clone(),
+                        outbox.clone(),
+                        stop_file.clone(),
+                    );
+                    tasks.push(thread::spawn(move || {
+                        provisioning::work(item, r, n, i, o, stop)
+                    }));
+                }
+            }
+        }
         let eligible: Vec<String> = hb["projects"]
             .as_array()
             .into_iter()
             .flatten()
             .filter_map(|p| {
+                if policy.project(p["name"].as_str().unwrap_or("")).is_err() {
+                    return None;
+                }
+                if policy
+                    .environment(p["name"].as_str().unwrap_or(""), &p["environment"], false)
+                    .is_err()
+                {
+                    return None;
+                }
+                if p["available"] == false {
+                    return None;
+                }
                 let project = p["name"].as_str()?;
                 let repo = p["repository"].as_str()?;
                 let project_id = p["id"].as_str()?;
@@ -2212,7 +2422,7 @@ fn worker() -> Result<(), String> {
         let configured = hb["capacity"].as_u64().unwrap_or(capacity);
         // The controller enforces its own count, but a worker must not exceed
         // its local limit if controller state is stale or was restored.
-        let available = configured.saturating_sub(tasks.len() as u64);
+        let available = configured.min(capacity).saturating_sub(tasks.len() as u64);
         for _ in 0..available {
             if stop_file.as_ref().is_some_and(|p| p.exists()) {
                 break;

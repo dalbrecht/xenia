@@ -45,3 +45,20 @@
 .enrollment-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 @media (max-width: 600px) { .enrollment-card { align-items: flex-start; } .enrollment-actions { width: 100%; } .enrollment-actions button { min-height: 44px; } }
 .enrollment-card > div { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+
+.project-list { display: grid; gap: 18px; }
+.project-card { padding: 20px; border: 1px solid #dedee4; border-radius: 12px; background: #fff; min-width: 0; }
+.project-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.assignment-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.assignment-card { margin-top: 14px; padding: 14px; background: #f6f6f8; border: 1px solid #e2e2e8; border-radius: 8px; min-width: 0; overflow-wrap: anywhere; }
+.assignment-card .status { margin-left: 10px; }
+.assignment-card small { display: block; margin: 6px 0; }
+.assignment-card pre { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.assignment-card .error { margin: 10px 0; white-space: pre-wrap; }
+.node-policy { font-size: 12px; margin-top: 8px; white-space: normal; }
+.node-policy p { margin: 8px 0; line-height: 1.5; }
+.setup-queue { margin-bottom: 24px; }
+#environment-dialog { max-width: 620px; }
+#environment-dialog p, #assignment-dialog p { line-height: 1.5; margin: 8px 0; }
+@media(max-width:600px) { .project-card { padding: 14px; } .project-heading .assignment-actions { width: 100%; } .project-heading h3 { overflow-wrap: anywhere; } .assignment-actions button { min-height: 44px; } }
+.node-policy { overflow-wrap: anywhere; }

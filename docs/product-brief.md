@@ -13,6 +13,7 @@ The initial release targets one operator on a trusted private network, using a p
 - Register projects and repositories, and discover or validate their local checkouts on worker nodes.
 - Start and revisit conversations, choose Codex or Claude Code, submit work, and follow streamed progress and results.
 - View queued, running, completed, failed, and canceled work; filter by project and node.
+- Select Native, Container or Hybrid per project; assign projects to nodes to clone code and prepare environments within node-local permissions.
 - Assign work to a specific eligible node or let the controller select one. Set a per-node limit on simultaneous jobs.
 - Execute work in a dedicated Git worktree, preserve the resulting branch and worktree for review, and provide an explicit cleanup action.
 - Show connected, disconnected, and unavailable nodes and explain why work cannot start.
@@ -30,7 +31,7 @@ The initial release targets one operator on a trusted private network, using a p
 
 ## Out of scope initially
 
-Multi-user accounts and authorization, public-internet exposure, automatic repository cloning or synchronization, automatic merging, autonomous deletion of work, and support for every agent CLI are not required for the first release. Offline job submission and mobile push notifications are also deferred; an installed PWA need not work offline beyond a clear disconnected state.
+Multi-user accounts and authorization, public-internet exposure, automatic merging of repository changes, autonomous deletion of work, and support for every agent CLI are not required for the first release. Offline job submission and mobile push notifications are also deferred; an installed PWA need not work offline beyond a clear disconnected state.
 
 ## Principles and open decisions
 
@@ -38,4 +39,4 @@ Rust is the preferred foundation for the controller and worker where practical. 
 
 The source is licensed under AGPL-3.0-only. Documentation, fixtures, examples, logs, screenshots, and defaults must use generic names and contain no personal paths, credentials, hostnames, or project data.
 
-Open decisions include supported operating systems, deployment and enrollment details, runner authentication, the exact semantics of conversation continuation, retention limits, and whether projects may contain multiple repositories in a single job. The first release assumes one repository per job and locally provisioned runner credentials.
+Open decisions include supported operating systems, deployment and enrollment details, runner authentication, the exact semantics of conversation continuation, retention limits, and whether projects may contain multiple repositories in a single job. The first release assumes one repository per job and locally provisioned runner credentials. Automatic project checkout and environment preparation are now in scope; native permissions remain the node owner’s authority.

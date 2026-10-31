@@ -18,6 +18,15 @@ and hostname are verified. Redirects are refused. The HTTP controller remains on
 loopback behind your HTTPS proxy; do not expose its raw port. See the
 [node enrollment protocol](node-enrollment.md) for lifecycle and limits.
 
+### Local permissions and project assignment
+
+The desktop app owns the machine’s runner permissions, project allowlist,
+automatic checkout/setup/Docker permissions and hard concurrency ceiling. The
+controller displays these read-only and can lower capacity. Stop and restart the
+worker to apply local changes. Automatic checkout, setup scripts and Docker are
+disabled by default. See [project environments](project-environments.md) before
+assigning a managed project. Existing manual checkouts remain supported.
+
 ### Optional legacy SSH connections
 
 Leave **Controller URL** blank to use the original local-port settings. For a

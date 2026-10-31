@@ -6,13 +6,22 @@
       <TextBlock Text="Node ID"/><TextBox x:Name="Node" Margin="0,3,0,10"/>
       <TextBlock Text="Node name"/><TextBox x:Name="NodeName" Margin="0,3,0,10"/>
       <TextBlock Text="Projects directory"/><TextBox x:Name="Root" Margin="0,3,0,10"/>
-      <TextBlock Text="Initial capacity (1–64)"/><TextBox x:Name="Capacity" Text="1" Margin="0,3,0,10"/>
+      <TextBlock Text="Maximum concurrent workers (1–64)"/><TextBox x:Name="Capacity" Text="1" Margin="0,3,0,10"/>
       <TextBlock Text="Controller URL (HTTPS; blank uses local or legacy SSH)"/><TextBox x:Name="ControllerUrl" TextChanged="OnControllerUrlChanged" Margin="0,3,0,10"/>
       <StackPanel x:Name="LegacyConnection">
       <TextBlock Text="Local controller port"/><TextBox x:Name="Port" Text="8080" Margin="0,3,0,10"/>
       <TextBlock Text="SSH host (blank for local controller)"/><TextBox x:Name="SshHost" Margin="0,3,0,10"/>
       <TextBlock Text="Controller port on SSH host"/><TextBox x:Name="RemotePort" Text="8080" Margin="0,3,0,10"/>
       </StackPanel>
+      <TextBlock Text="Local permissions" FontWeight="Bold" Margin="0,8,0,6"/>
+      <CheckBox x:Name="AllowCodex" Content="Allow Codex" IsChecked="True" Margin="0,0,0,6"/>
+      <CheckBox x:Name="AllowClaude" Content="Allow Claude Code" IsChecked="True" Margin="0,0,0,6"/>
+      <CheckBox x:Name="AllowCheckout" Content="Allow automatic project checkouts" Margin="0,0,0,6"/>
+      <CheckBox x:Name="AllowSetup" Content="Allow repository setup scripts" Margin="0,0,0,6"/>
+      <CheckBox x:Name="AllowContainers" Content="Allow Docker environments and services" Margin="0,0,0,6"/>
+      <TextBlock Text="Allowed project directories (comma-separated; blank allows all)" TextWrapping="Wrap"/>
+      <TextBox x:Name="AllowedProjects" Margin="0,3,0,10"/>
+      <TextBlock Text="The controller cannot raise these local permissions or concurrency limit. Agent file and network access still follow its runner and OS settings." Foreground="Gray" TextWrapping="Wrap" Margin="0,0,0,10"/>
       <CheckBox x:Name="CodexInteractive" Content="Interactive Codex approvals (experimental)" Margin="0,4,0,10"/>
       <CheckBox x:Name="ClaudeInteractive" Content="Interactive Claude questions and approvals (experimental)" Margin="0,0,0,10"/>
       <TextBlock Text="Worker credential"/><PasswordBox x:Name="Token" Margin="0,3,0,10"/>

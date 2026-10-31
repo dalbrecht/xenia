@@ -148,6 +148,12 @@ import Foundation
             env.removeValue(forKey: "XENIA_CLAUDE_CONTROL")
             if defaults.bool(forKey: "codexInteractive") { env["XENIA_CODEX_APP_SERVER"] = "1" }
             if defaults.bool(forKey: "claudeInteractive") { env["XENIA_CLAUDE_CONTROL"] = "1" }
+            env["XENIA_ALLOW_CODEX"] = (defaults.object(forKey: "allowCodex") as? Bool ?? true) ? "1" : "0"
+            env["XENIA_ALLOW_CLAUDE"] = (defaults.object(forKey: "allowClaude") as? Bool ?? true) ? "1" : "0"
+            env["XENIA_ALLOW_PROJECT_CHECKOUT"] = defaults.bool(forKey: "allowCheckout") ? "1" : "0"
+            env["XENIA_ALLOW_SETUP_SCRIPTS"] = defaults.bool(forKey: "allowSetup") ? "1" : "0"
+            env["XENIA_ALLOW_CONTAINERS"] = defaults.bool(forKey: "allowContainers") ? "1" : "0"
+            env["XENIA_ALLOWED_PROJECTS"] = defaults.string(forKey: "allowedProjects") ?? ""
             env["XENIA_NODE_ID"] = node
             let name = defaults.string(forKey: "name") ?? ""
             env["XENIA_NODE_NAME"] = name.isEmpty ? node : name

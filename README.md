@@ -12,5 +12,8 @@ Xenia is licensed under the [GNU Affero General Public License, version 3](LICEN
 
 See the [first release readiness assessment](docs/release-readiness.md) for acceptance evidence and remaining verification.
 
+Choose [per-project environments and node permissions](docs/project-environments.md)
+for automated checkouts and Native, Container or Hybrid setup.
+
 Contributor checks, including the Chromium/WebKit mobile browser matrix, are in
 the [development verification guide](docs/verification.md).

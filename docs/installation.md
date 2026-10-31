@@ -206,9 +206,17 @@ an existing separately issued credential may set `XENIA_CONTROLLER` to the HTTPS
 origin. The existing local-port/SSH mode remains available for compatibility.
 See [node enrollment](node-enrollment.md) for protocol details.
 
+## Assign projects and prepare environments
+
+See [project environments](project-environments.md) to choose Native, Container or
+Hybrid, configure a Git source and setup recipe, and assign nodes. Enable the
+required checkout/script/Docker permissions in each node’s own desktop app first.
+The controller cannot raise local permissions or the maximum worker count. Manual
+projects without an environment keep their existing checkout behavior.
+
 ## Submit, inspect, follow up, and cancel
 
-1. In **Projects**, add the project and repository directory names. Both names must be simple path components; the checkout must exist on the worker.
+1. In **Projects**, add the project and repository directory names. Both names must be simple path components; the checkout must exist on the worker, or be provisioned through a ready project assignment.
 2. Select **New work**, choose the project, runner, and either automatic assignment or a specific node, then enter a task. The queue persists in SQLite.
 3. Select a job to view its status, worktree path, branch, and output. Runner events are forwarded as lines arrive; the page polls for updates. The display extracts some agent messages from the runner's JSON output. Not all event types are presented yet.
 4. Select **Cancel work** for a queued or running job. Queued jobs cancel immediately. A running job becomes `cancel_requested`; the connected worker attempts to terminate its process group on Unix or its job object on Windows. It reports `canceled` only after the runner has exited and its output pipes have closed. An offline worker cannot receive the request, and a request may race with normal completion. Xenia also terminates remaining supervised descendants when a runner exits normally; do not use an agent job to launch a service intended to outlive that job.

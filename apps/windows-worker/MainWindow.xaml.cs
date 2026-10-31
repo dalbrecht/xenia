@@ -7,7 +7,7 @@ using System.Windows;
 namespace XeniaWorker;
 public partial class MainWindow : Window
 {
-    sealed record Config(string Node, string Name, string Root, int Capacity, int Port, string SshHost, int RemotePort, bool CodexInteractive = false, bool ClaudeInteractive = false, string ControllerUrl = "");
+    sealed record Config(string Node, string Name, string Root, int Capacity, int Port, string SshHost, int RemotePort, bool CodexInteractive = false, bool ClaudeInteractive = false, string ControllerUrl = "", bool AllowCodex = true, bool AllowClaude = true, bool AllowCheckout = false, bool AllowSetup = false, bool AllowContainers = false, string AllowedProjects = "");
     readonly string directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "XeniaWorker");
     Process? worker, tunnel, pairing;
     string? pairStopFile;
@@ -60,7 +60,7 @@ public partial class MainWindow : Window
     public MainWindow() {
         InitializeComponent(); Directory.CreateDirectory(directory);
         Root.Text=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),"projects");
-        try { var path=Path.Combine(directory,"config.json"); if(File.Exists(path) && JsonSerializer.Deserialize<Config>(File.ReadAllText(path)) is { } c) { Node.Text=c.Node;NodeName.Text=c.Name;Root.Text=c.Root;Capacity.Text=c.Capacity.ToString();Port.Text=c.Port.ToString();SshHost.Text=c.SshHost;RemotePort.Text=(c.RemotePort > 0 ? c.RemotePort : 8080).ToString();ControllerUrl.Text=c.ControllerUrl;CodexInteractive.IsChecked=c.CodexInteractive;ClaudeInteractive.IsChecked=c.ClaudeInteractive; } Token.Password=Credentials.Load(); }
+        try { var path=Path.Combine(directory,"config.json"); if(File.Exists(path) && JsonSerializer.Deserialize<Config>(File.ReadAllText(path)) is { } c) { Node.Text=c.Node;NodeName.Text=c.Name;Root.Text=c.Root;Capacity.Text=c.Capacity.ToString();Port.Text=c.Port.ToString();SshHost.Text=c.SshHost;RemotePort.Text=(c.RemotePort > 0 ? c.RemotePort : 8080).ToString();ControllerUrl.Text=c.ControllerUrl;AllowCodex.IsChecked=c.AllowCodex;AllowClaude.IsChecked=c.AllowClaude;AllowCheckout.IsChecked=c.AllowCheckout;AllowSetup.IsChecked=c.AllowSetup;AllowContainers.IsChecked=c.AllowContainers;AllowedProjects.Text=c.AllowedProjects;CodexInteractive.IsChecked=c.CodexInteractive;ClaudeInteractive.IsChecked=c.ClaudeInteractive; } Token.Password=Credentials.Load(); }
         catch(Exception e) { Status.Text="Cannot load settings: "+e.Message; }
     }
     void OnControllerUrlChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) {if(LegacyConnection is not null)LegacyConnection.Visibility=string.IsNullOrWhiteSpace(ControllerUrl.Text)?Visibility.Visible:Visibility.Collapsed;}
@@ -72,7 +72,7 @@ public partial class MainWindow : Window
         var engine=Path.Combine(AppContext.BaseDirectory,"xenia-engine.exe"); if(!File.Exists(engine)){Status.Text="The bundled worker engine is missing.";return;}
         try {
             Credentials.Save(Token.Password);
-            File.WriteAllText(Path.Combine(directory,"config.json"),JsonSerializer.Serialize(new Config(Node.Text,NodeName.Text,Root.Text,capacity,port,SshHost.Text,remotePort,CodexInteractive.IsChecked == true,ClaudeInteractive.IsChecked == true,ControllerUrl.Text.Trim())));
+            File.WriteAllText(Path.Combine(directory,"config.json"),JsonSerializer.Serialize(new Config(Node.Text,NodeName.Text,Root.Text,capacity,port,SshHost.Text,remotePort,CodexInteractive.IsChecked == true,ClaudeInteractive.IsChecked == true,ControllerUrl.Text.Trim(),AllowCodex.IsChecked==true,AllowClaude.IsChecked==true,AllowCheckout.IsChecked==true,AllowSetup.IsChecked==true,AllowContainers.IsChecked==true,AllowedProjects.Text)));
             stopFile=Path.Combine(directory,"stop-"+Guid.NewGuid().ToString("N"));
             if(string.IsNullOrWhiteSpace(ControllerUrl.Text) && !string.IsNullOrWhiteSpace(SshHost.Text)) {
                 tunnelArguments=new[]{"-N","-o","BatchMode=yes","-o","ExitOnForwardFailure=yes","-o","ServerAliveInterval=15","-o","ServerAliveCountMax=3","-L",$"127.0.0.1:{port}:127.0.0.1:{remotePort}","--",SshHost.Text};
@@ -82,6 +82,8 @@ public partial class MainWindow : Window
             info.Environment.Remove("XENIA_CODEX_APP_SERVER");info.Environment.Remove("XENIA_CLAUDE_CONTROL");
             if(CodexInteractive.IsChecked == true)info.Environment["XENIA_CODEX_APP_SERVER"]="1";
             if(ClaudeInteractive.IsChecked == true)info.Environment["XENIA_CLAUDE_CONTROL"]="1";
+            info.Environment["XENIA_ALLOW_CODEX"]=AllowCodex.IsChecked==true?"1":"0";info.Environment["XENIA_ALLOW_CLAUDE"]=AllowClaude.IsChecked==true?"1":"0";
+            info.Environment["XENIA_ALLOW_PROJECT_CHECKOUT"]=AllowCheckout.IsChecked==true?"1":"0";info.Environment["XENIA_ALLOW_SETUP_SCRIPTS"]=AllowSetup.IsChecked==true?"1":"0";info.Environment["XENIA_ALLOW_CONTAINERS"]=AllowContainers.IsChecked==true?"1":"0";info.Environment["XENIA_ALLOWED_PROJECTS"]=AllowedProjects.Text;
             info.Environment["XENIA_WORKER_TOKEN"]=Token.Password;info.Environment["XENIA_NODE_ID"]=Node.Text;info.Environment["XENIA_NODE_NAME"]=string.IsNullOrWhiteSpace(NodeName.Text)?Node.Text:NodeName.Text;
             info.Environment["XENIA_PROJECTS_ROOT"]=Root.Text;info.Environment["XENIA_CAPACITY"]=capacity.ToString();info.Environment["XENIA_CONTROLLER"]=string.IsNullOrWhiteSpace(ControllerUrl.Text)?$"http://127.0.0.1:{port}":ControllerUrl.Text.Trim();info.Environment["XENIA_WORKER_DB"]=Path.Combine(directory,"worker.db");info.Environment["XENIA_STOP_FILE"]=stopFile;
             var process=new Process { StartInfo=info,EnableRaisingEvents=true };process.OutputDataReceived+=(_,e)=>Log(e.Data);process.ErrorDataReceived+=(_,e)=>Log(e.Data);process.Exited+=(_,_)=>Dispatcher.BeginInvoke(new Action(()=>Finished(process)));
@@ -111,7 +113,7 @@ public partial class MainWindow : Window
                 if(data.GetProperty("state").GetString()=="completed") {
                     var credential=data.GetProperty("token").GetString() ?? throw new InvalidOperationException("Missing credential");
                     Token.Password=credential;Credentials.Save(credential);completed=true;
-                    File.WriteAllText(Path.Combine(directory,"config.json"),JsonSerializer.Serialize(new Config(Node.Text.Trim(),NodeName.Text,Root.Text,int.TryParse(Capacity.Text,out var c)?c:1,int.TryParse(Port.Text,out var p)?p:8080,SshHost.Text,int.TryParse(RemotePort.Text,out var r)?r:8080,CodexInteractive.IsChecked==true,ClaudeInteractive.IsChecked==true,ControllerUrl.Text.Trim())));
+                    File.WriteAllText(Path.Combine(directory,"config.json"),JsonSerializer.Serialize(new Config(Node.Text.Trim(),NodeName.Text,Root.Text,int.TryParse(Capacity.Text,out var c)?c:1,int.TryParse(Port.Text,out var p)?p:8080,SshHost.Text,int.TryParse(RemotePort.Text,out var r)?r:8080,CodexInteractive.IsChecked==true,ClaudeInteractive.IsChecked==true,ControllerUrl.Text.Trim(),AllowCodex.IsChecked==true,AllowClaude.IsChecked==true,AllowCheckout.IsChecked==true,AllowSetup.IsChecked==true,AllowContainers.IsChecked==true,AllowedProjects.Text)));
                     PairingStatus.Text="Approved. Credential saved in Windows Credential Manager. Choose Start worker.";
                 } else PairingStatus.Text="Compare code "+data.GetProperty("code").GetString()+" in the controller’s Nodes view and approve this worker. Expires in five minutes.";
             }

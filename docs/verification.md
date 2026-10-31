@@ -16,6 +16,8 @@ python3 tests/history_api.py
 python3 tests/pairing_api.py
 python3 tests/node_pairing.py
 python3 tests/worker_transport.py
+python3 tests/project_assignment_api.py
+python3 tests/project_environments.py
 ```
 
 The integration tests start temporary controllers and synthetic runners. They do
@@ -78,3 +80,9 @@ playback can remain pending. Set `XENIA_TEST_SYNTHETIC_VIDEO=1` to exercise that
 fixture on another host. This does not validate an actual camera or replace
 installed-phone testing. Database fixtures explicitly close SQLite connections
 after committing so Windows can remove temporary database files.
+
+Real container fixtures require an already-running Docker engine and Compose.
+Run `XENIA_TEST_DOCKER=1 python3 tests/project_environments.py`; when system temp
+is not mounted into the engine, set `XENIA_TEST_ROOT` to an already-shared writable
+directory. The test removes its own containers and fixture image. It does not
+change engine mounts, start Docker or install a runtime.

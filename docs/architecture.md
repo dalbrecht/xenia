@@ -38,7 +38,7 @@ Each worker has a configurable projects root, defaulting to `~/projects`. A gene
 ~/projects/<project>/.worktrees/<repository>/<worktree-id>/
 ```
 
-Repositories are provisioned on each worker outside Xenia for the initial release. Validate that the checkout is a Git repository and that the requested base ref exists locally; do not silently fetch or change the main checkout. Resolve and validate paths under the configured roots, reject traversal and unsafe symlink escapes, and never derive shell commands by interpolating untrusted strings.
+Projects without environment configuration retain manual checkout behavior. Managed projects declare an HTTPS Git source, revision and Native, Container or Hybrid environment. Explicit node assignment authorizes clone/fetch and setup within permissions stored in the node’s desktop app. Validate root and origin, stage missing clones, resolve the selected commit, and prepare a detached worktree. Existing checkout files and branches remain unchanged. Schedule managed work only after successful preparation. See [project environments](project-environments.md) for lifecycle, container/session handling, local policy and recovery. Resolve and validate paths under the configured roots, reject traversal and unsafe symlink escapes, and never derive shell commands by interpolating untrusted strings.
 
 For a new unit of work, the worker resolves the base ref to a commit, creates a unique branch and worktree, records both, then starts the runner inside it. Concurrent jobs get separate worktrees by default. A continuation can reuse the same worktree only when no other job is using it; queue it otherwise. Never run two agents against the same worktree concurrently.
 

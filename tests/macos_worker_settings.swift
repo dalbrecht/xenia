@@ -6,7 +6,10 @@ import Foundation
     @MainActor static func main() async {
         let environment = ProcessInfo.processInfo.environment
         UserDefaults.standard.register(defaults: [
-            "node": "synthetic-node", "capacity": 1, "port": "8080",
+            "node": "synthetic-node", "capacity": 1,
+            "allowCodex": environment["TEST_POLICY"] != "1", "allowClaude": true,
+            "allowCheckout": environment["TEST_POLICY"] == "1", "allowSetup": environment["TEST_POLICY"] == "1",
+            "allowContainers": environment["TEST_POLICY"] == "1", "allowedProjects": environment["TEST_POLICY"] == "1" ? "example" : "", "port": "8080",
             "controllerURL": environment["TEST_HTTPS"] == "1" ? "https://controller.example:8443" : "",
             "sshHost": environment["TEST_HTTPS"] == "1" ? "legacy-must-not-run" : "",
             "codexInteractive": environment["TEST_CODEX"] == "1",
